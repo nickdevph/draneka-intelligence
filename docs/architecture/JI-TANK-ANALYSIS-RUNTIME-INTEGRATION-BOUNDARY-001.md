@@ -7,7 +7,7 @@
 - **Canonical skill path:** `skills/draneka-tank-analysis`
 - **Canonical semantic version:** `0.1.0`
 - **Canonical result schema:** `draneka.tank-analysis-result.v1`
-- **Current Journal runtime head inspected:** `5e8e24d8560b67ce8d74d310d09854cb97fe495d`
+- **Current Journal runtime head inspected:** `50e0083e44fda563906201a71639490a40f8807f`
 - **Scope:** tank-related Journal Assistant deep-analysis requests only
 - **Production mutation in this boundary record:** none
 
@@ -107,7 +107,7 @@ AND CONTEXT_IDENTITY_MATCH
 AND REQUEST_BINDING_MATCH
 AND ACTIVE_ATTEMPT/CURRENT_REQUEST
 AND ONE-TIME_CAPABILITY/CLAIM_VALID
-AND APPEND_ONLY_ARTIFACT_EVIDENCE_VALID
+AND ARTIFACT_REFERENCE_AND_REMOTE_PROOF_VALID
 ```
 
 Schema validation must enforce the admitted canonical schema shape, required fields, enums, bounds, conditionals, and exact skill name/version. Semantic validation must additionally enforce:
@@ -125,10 +125,9 @@ Request binding is explicit: the canonical result's `request.request_id` must eq
 
 ## Result custody and presentation
 
-The immutable `journal_ji_execution_results.result_envelope` retains the validated canonical Tank result and the execution envelope. The Journal Analysis Request receives its existing owner-facing non-canonical response projection, including the validated summary/findings and provenance pointer, so current Web/Android consumers remain compatible. The projection is presentation only; it does not promote inference to a Journal fact.
+The existing append-only `journal_ji_execution_results.result_envelope` retains the validated canonical Tank result and the execution envelope. This integration adds no indefinite-retention, erasure, export, or deletion promise beyond the repository's existing operational policy. The Journal Analysis Request receives its existing owner-facing non-canonical response projection, including the validated summary/findings and provenance pointer, so current Web/Android consumers remain compatible. The projection is presentation only; it does not promote inference to a Journal fact.
 
-The Work artifact remains append-only evidence in `nickdevph/aquaticfinder-intelligence-work`. It contains the generic Work result and the execution source identity/artifact reference required by the current JI contract. It does not become a Journal record.
-
+The Work artifact remains append-only evidence in `nickdevph/aquaticfinder-intelligence-work`. Its required path is exactly `journal-intelligence/results/<analysisRequestId>/<attemptId>.json`; the commit SHA is immutable. Runtime acceptance must validate that exact path, fetch the artifact at the pinned commit, require a successful bounded JSON read, and require the artifact's generic `source.analysisRequestId`, `source.executionJobId`, `source.attemptId`, and `source.contextFingerprint` to match the locked execution identity. If the read or identity proof is unavailable, acceptance fails closed. A syntactically shaped reference alone is not proof of custody. The artifact does not become a Journal record.
 ## Mutation boundary
 
 The Tank Skill, executor, and provider have no Journal write authority. Result reconciliation updates only the JI execution/request lifecycle state under the existing Journal transaction. Any user-approved maintenance, treatment, feeding, stocking, or other action must use a separately authorized Journal operation and its own source-domain semantics. No skill result can write Tank history, livestock facts, measurements, schedules, or cases.
