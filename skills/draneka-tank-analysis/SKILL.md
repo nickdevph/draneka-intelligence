@@ -60,6 +60,20 @@ In summary, prefer:
 
 Conflicts must be surfaced, not silently reconciled.
 
+## Confidence semantics
+
+Confidence measures **evidentiary support and remaining uncertainty**. It does not measure urgency or severity.
+
+Apply the same definitions to finding confidence, hypothesis confidence, and `uncertainty.overall_confidence`:
+
+- `high` — the conclusion is strongly supported by relevant, internally consistent evidence; material conflicts are absent or resolved, and plausible alternatives are unlikely to change the current interpretation. High confidence is not certainty.
+- `medium` — meaningful evidence supports the conclusion, but missing data, indirect evidence, unresolved limitations, or plausible alternatives could materially change the interpretation.
+- `low` — evidence is limited, indirect, stale, conflicting, or otherwise insufficient for more than a tentative conclusion. Low-confidence conclusions should primarily guide discriminating observation or measurement rather than irreversible intervention, unless a separate safety reason requires precautionary action.
+
+`CONFIDENCE != URGENCY`.
+
+A high-urgency condition may have low confidence when potential harm is serious but the cause is uncertain. A low-urgency conclusion may have high confidence when the evidence is strong and no immediate harm is indicated.
+
 ## Analysis workflow
 
 ### 1. Classify the inquiry
@@ -78,13 +92,13 @@ Prefer causally relevant evidence over exhaustive context. A feeding question ma
 
 Keep these distinct throughout reasoning and output:
 
-- **Observed** — directly present in authoritative records, current user statements, or supplied media evidence.
+- **Observed** — directly present in authoritative records, current user statements, or directly perceptible supplied media features.
 - **Derived** — calculated or summarized from observed evidence, such as a parameter trend.
 - **Inferred** — an interpretation or hypothesis supported by evidence but not directly observed.
 - **General knowledge** — aquarium knowledge used to interpret the case.
 - **Unknown** — missing, stale, contradictory, or unavailable information.
 
-Never phrase an inferred cause as though it were observed.
+Never phrase an inferred cause as though it were observed. Media evidence may record directly perceptible features; diagnostic, species, or causal interpretation of those features belongs in inference unless independently established.
 
 ### 4. Assess data quality
 
@@ -109,7 +123,7 @@ For each material hypothesis:
 - state the hypothesis;
 - state evidence supporting it;
 - state evidence against it or reducing its likelihood;
-- assign a confidence level;
+- assign a confidence level using the normative confidence semantics above;
 - explain what additional evidence would discriminate it from alternatives when useful.
 
 Do not create a long undifferentiated list of every theoretically possible cause.
@@ -117,6 +131,8 @@ Do not create a long undifferentiated list of every theoretically possible cause
 ### 6. Rank using this tank's evidence
 
 Rank explanations using the available Tank evidence, chronology, and known aquarium mechanisms.
+
+Every hypothesis must have an explicit positive integer `rank`. `rank: 1` is the highest-supported hypothesis. Ranks must be unique and consecutive from `1` through the number of hypotheses, and the hypotheses array must be ordered by ascending rank. Ties are not permitted; if support is effectively tied, use the best-supported ordering available and explain the uncertainty in rationale.
 
 Recent changes temporally linked to the observation should normally receive more weight than unrelated background facts, while still accounting for delayed biological effects where relevant.
 
@@ -130,6 +146,8 @@ Use one of:
 - `low` — primarily informational or optimization-oriented.
 
 Do not label an inquiry critical merely because a generic care guide describes the condition as dangerous. Tie urgency to available evidence.
+
+Urgency is independent from confidence. When potential harm warrants precaution despite uncertain cause, state the lower confidence and the higher urgency separately.
 
 ### 8. Recommend bounded actions
 
@@ -160,6 +178,22 @@ Return a result that conforms to `schemas/tank-analysis-result.schema.json`.
 
 The executor may additionally produce presentation prose, but the structured result is the canonical machine-readable analysis output.
 
+## Structured evidence invariants
+
+The schema enforces non-empty evidence linkage where Draft 2020-12 can express it. The following semantic invariants are also mandatory for every conforming result and must fail closed at any validating integration boundary:
+
+1. Every evidence `id` is unique within the result.
+2. Every finding `basis` reference resolves to exactly one evidence item.
+3. Every hypothesis `evidence_for` and `evidence_against` reference resolves to exactly one evidence item.
+4. Every recommended-action `basis` reference resolves to exactly one evidence item.
+5. Every material finding, hypothesis, and recommended action has a non-empty evidence basis as required by the schema.
+6. Hypothesis ranks are unique, consecutive from `1..N`, and array order is ascending by rank.
+7. Every external-source provenance `id` is unique.
+8. Evidence with `source_class: external_source` has a non-empty `source_ref` that resolves to exactly one `provenance.external_sources[].id`.
+9. Use of external-source evidence or the `external_source` knowledge class requires at least one external-source provenance record.
+
+Duplicate identifiers, dangling references, ambiguous references, missing external provenance, or inconsistent ranking make the result non-conforming even if a generic JSON Schema validator cannot express the cross-array constraint.
+
 ## Required result principles
 
 Every completed analysis must:
@@ -173,6 +207,7 @@ Every completed analysis must:
 - include bounded recommended actions when action is warranted;
 - include monitoring and follow-up information when useful;
 - record knowledge/provenance classes used;
+- obey the structured evidence invariants above;
 - avoid claiming source-domain mutations occurred.
 
 ## Failure / abstention rules
@@ -193,9 +228,13 @@ Before returning:
 1. Did I use this Tank's evidence before generic ranges?
 2. Did I distinguish observed facts from inference?
 3. Did I surface important missing/stale/conflicting data?
-4. Are hypotheses ranked rather than merely listed?
-5. Are recommendations proportional, conservative, and reversible where possible?
-6. Did I avoid parameter chasing without evidence?
-7. Did I comply with the safety policy?
-8. Does the structured payload validate against the result schema?
-9. Did I avoid mutating or claiming authority over Journal data?
+4. Are hypotheses explicitly ranked and ordered by support?
+5. Are material findings, hypotheses, and actions grounded in non-empty evidence references?
+6. Are evidence IDs unique and all references resolvable exactly once?
+7. If external knowledge was used, is its provenance complete and linked?
+8. Did I apply confidence semantics independently from urgency?
+9. Are recommendations proportional, conservative, and reversible where possible?
+10. Did I avoid parameter chasing without evidence?
+11. Did I comply with the safety policy?
+12. Does the structured payload validate against the result schema and semantic invariants?
+13. Did I avoid mutating or claiming authority over Journal data?
