@@ -76,7 +76,7 @@ The existing Journal binding is the canonical bounded context identity:
 }
 ```
 
-The fingerprint is calculated by Journal's stable JSON canonicalization over the bounded context package. The package is bounded by the existing loader limits and contains the Journal retrieval/evidence provenance needed for audit. `requestRevision` and `processingCycle` prevent a fingerprint-valid result from being accepted for a later attempt. The executor must not invent or omit a context identity.
+The fingerprint is computed by Journal at admission from the exact `boundedContext` value persisted in `journal_ji_analysis_context_bindings.bounded_context`, before any external projection redaction. The algorithm is the existing `stableJson` implementation in `journal-ji-durable-runtime.js`: arrays preserve order; plain-object keys are sorted lexicographically; primitives use `JSON.stringify`; the UTF-8 canonical string is hashed with SHA-256 and encoded as lowercase hexadecimal. This is deliberately the JI binding fingerprint, not the separate CG5 context fingerprint. The package is bounded by the existing loader limits and contains the Journal retrieval/evidence provenance needed for audit. `requestRevision` and `processingCycle` prevent a fingerprint-valid result from being accepted for a later attempt. The executor must echo, not recompute or invent, the context identity. Redacting account/Tank identity from the external projection does not change the persisted pre-redaction fingerprint.
 
 ## Execution envelope
 
@@ -93,7 +93,7 @@ Provider/runtime facts remain outside `draneka.tank-analysis-result.v1`. The dur
 - append-only GitHub artifact evidence reference;
 - the canonical Tank result object.
 
-The initial integration sets external-research authorization to `NOT_AUTHORIZED`. External-source evidence is consequently rejected unless a separately admitted policy explicitly authorizes it and the envelope records that authorization. Provider/model details are provenance only and cannot become Tank facts or Journal authority.
+The initial integration sets external-research authorization to `NOT_AUTHORIZED`. External-source evidence is consequently rejected unless a separately admitted policy explicitly authorizes it and the envelope records that authorization. Provider/model details are provenance only and cannot become Tank facts or Journal authority. For the initial default-deny route, `externalResearchAuthorization` is exactly `NOT_AUTHORIZED`; any external-source result is rejected unless a separately admitted policy changes that state and the matching envelope is present.
 
 ## Acceptance predicates
 
@@ -121,7 +121,7 @@ Schema validation must enforce the admitted canonical schema shape, required fie
 - confidence is one of `high`, `medium`, or `low`, with urgency independent;
 - no forbidden authority, credential, or mutation fields.
 
-Invalid schema, semantic, skill, context, request, or currentness results are durably recorded as rejected and never update the Journal Analysis Request to READY. Stale or mismatched submissions fail closed; they are not reconciled to a different request, Tank, user, revision, or attempt.
+Request binding is explicit: the canonical result's `request.request_id` must equal the locked `analysisRequestId`; its `request.tank_id` must be `null` in the external-worker result because the private projection redacts Tank identity; the locked Journal job/context binding supplies the authoritative Tank association. The result's request identity, context identity, attempt identity, and artifact identity must all match the locked row. Invalid schema, semantic, skill, context, request, or currentness results are durably recorded as rejected and never update the Journal Analysis Request to READY. Stale or mismatched submissions fail closed; they are not reconciled to a different request, Tank, user, revision, or attempt.
 
 ## Result custody and presentation
 
@@ -138,10 +138,10 @@ The Tank Skill, executor, and provider have no Journal write authority. Result r
 - A result with a wrong skill or context identity is rejected terminally as an admission/currentness failure.
 - A schema or semantic failure is rejected terminally and preserved with bounded validation codes.
 - A valid result submitted after request revision, processing cycle, or context change is rejected as stale.
-- One-time browser capability and claim checks remain in force; an identical terminal replay may be acknowledged idempotently, while a different terminal result is rejected.
+- The browser result capability is one-shot and is consumed before result reconciliation; a repeated browser submission is rejected as a capability replay. The claim-token service path may acknowledge an identical already-terminal replay, while a different terminal result is rejected. No worker is promised retry through a consumed browser capability; a retry requires a new admitted attempt.
 - Lease expiry/recovery remains under the dedicated `journal_recovery_admin` path; the executor cannot requeue or reconcile work.
 - The integration is additive and guarded by a single eligible `TANK_ANALYSIS` predicate. Rollback is the prior deployed Journal version and provider admission/configuration, with no destructive migration. Activation is prohibited unless the exact prior deployment and provider admission are recorded immediately before change.
-- Observability records IDs, hashes, validation dispositions, and bounded codes only; it does not log account/Tank payloads, credentials, tokens, or hidden reasoning.
+- Observability records IDs, hashes, validation dispositions, artifact-proof status, and bounded codes only; it does not log account/Tank payloads, credentials, tokens, or hidden reasoning.
 
 ## Qualification obligations
 
