@@ -82,7 +82,7 @@ After consolidation, a fresh architecture review should examine at minimum:
 
 ## Tank Analysis Skill
 
-The initial proposed package lives under `skills/tank-analysis/` and separates:
+The initial proposed package lives under `skills/draneka-tank-analysis/` and separates:
 
 - **skill/workflow contract** — how Tank questions must be analyzed;
 - **Journal evidence** — what is true about a specific Tank;
