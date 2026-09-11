@@ -2,6 +2,8 @@
 
 These are behavioral acceptance cases for `draneka-tank-analysis` v0.1.0. They are not intended to encode one exact prose answer.
 
+A result is accepted only when it satisfies both the Draft 2020-12 JSON Schema and the mandatory semantic invariants in `SKILL.md`. Cross-array uniqueness and referential-integrity rules that generic JSON Schema cannot express must be enforced by semantic validation at an integration boundary and are treated as fail-closed requirements here.
+
 ## EVAL-001 — Stable high pH, healthy Neocaridina
 
 ### Input
@@ -137,6 +139,97 @@ These are behavioral acceptance cases for `draneka-tank-analysis` v0.1.0. They a
 - either answer at a more general evidence-supported level or abstain from the unsupported part;
 - record `general_model` only if general model knowledge is actually used.
 
+## EVAL-009 — High urgency with low confidence
+
+### Input
+
+- Multiple livestock are suddenly distressed.
+- The only current evidence is a user observation and a recent major maintenance event.
+- Current ammonia, nitrite, dissolved oxygen, and temperature measurements are unavailable.
+- The potential consequence of delaying basic verification/low-risk mitigation is serious, but the cause is not established.
+
+### Must
+
+- allow `urgent` or `critical` urgency when justified by potential harm;
+- use `low` confidence for causal hypotheses and overall confidence unless stronger evidence exists;
+- explicitly state that confidence measures evidentiary support while urgency measures time-sensitive risk;
+- recommend conservative, reversible verification/mitigation rather than a cause-specific irreversible intervention.
+
+### Must not
+
+- raise confidence merely because urgency is high;
+- lower urgency solely because the cause is uncertain.
+
+## EVAL-010 — Evidence grounding and referential integrity
+
+### Invalid subcases
+
+Each of the following must be rejected as non-conforming:
+
+1. a finding with `basis: []`;
+2. a hypothesis with `evidence_for: []`;
+3. a recommended action with `basis: []`;
+4. two evidence items with the same `id`;
+5. a finding/action/hypothesis reference to an evidence ID that does not exist.
+
+### Expected enforcement
+
+- empty finding/action/hypothesis support arrays: `REJECTED_BY_SCHEMA`;
+- duplicate evidence IDs: `REJECTED_BY_SEMANTIC_VALIDATION`;
+- dangling evidence references: `REJECTED_BY_SEMANTIC_VALIDATION`.
+
+No consumer may treat a schema-valid payload with duplicate or unresolved references as conforming.
+
+## EVAL-011 — Deterministic hypothesis ranking
+
+### Input
+
+- Three bounded hypotheses are supported to different degrees by the available Tank evidence.
+
+### Must
+
+- assign explicit ranks `1`, `2`, and `3`;
+- place the highest-supported hypothesis at rank `1`;
+- keep ranks unique and consecutive;
+- order the hypotheses array by ascending rank;
+- preserve confidence as a separate field rather than deriving confidence mechanically from rank.
+
+### Invalid subcases
+
+The following are non-conforming and must fail semantic validation:
+
+- duplicate ranks;
+- skipped ranks such as `1, 3`;
+- array order inconsistent with rank.
+
+## EVAL-012 — External-source provenance linkage
+
+### Passing subcase
+
+- external research is permitted and materially used;
+- the result includes `external_source` in `provenance.knowledge_classes_used`;
+- `provenance.external_sources` contains at least one record with a unique `id`, title, reference, and retrieval time when available;
+- every evidence item with `source_class: external_source` has `source_ref` equal to exactly one external-source provenance `id`.
+
+This result must pass schema validation and semantic linkage validation.
+
+### Invalid subcases
+
+Each of the following must be rejected:
+
+1. external-source evidence exists but `provenance.external_sources` is absent;
+2. external-source evidence exists but `provenance.external_sources` is empty;
+3. `external_source` is listed in `knowledge_classes_used` but external provenance is absent/empty;
+4. external-source evidence has a missing/null/empty `source_ref`;
+5. external-source evidence `source_ref` does not match exactly one external-source provenance `id`;
+6. duplicate external-source provenance IDs make linkage ambiguous.
+
+### Expected enforcement
+
+- absent/empty provenance when external use is declared: `REJECTED_BY_SCHEMA`;
+- missing/null/empty external `source_ref`: `REJECTED_BY_SCHEMA`;
+- unresolved or duplicate external provenance linkage: `REJECTED_BY_SEMANTIC_VALIDATION`.
+
 ## Cross-eval acceptance checks
 
 Every successful result must:
@@ -144,7 +237,11 @@ Every successful result must:
 - identify skill version `0.1.0`;
 - preserve source-domain authority boundaries;
 - distinguish observation/derivation/inference/unknowns;
+- use the normative high/medium/low confidence definitions independently from urgency;
 - avoid unsupported certainty;
-- make evidence references traceable;
-- conform to `schemas/tank-analysis-result.schema.json`;
+- use explicit unique/consecutive hypothesis ranks;
+- give material findings, hypotheses, and recommended actions non-empty evidence support;
+- use unique evidence IDs and resolvable references;
+- preserve mandatory external-source provenance and linkage when external knowledge is used;
+- conform to `schemas/tank-analysis-result.schema.json` and the semantic invariants in `SKILL.md`;
 - not claim that Journal records were changed.
