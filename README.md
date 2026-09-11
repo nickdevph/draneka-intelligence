@@ -13,6 +13,7 @@ CURRENT_JI_BEHAVIOR_CHANGE = NOT_AUTHORIZED
 CURRENT_PROVIDER_CHANGE = NOT_AUTHORIZED
 CURRENT_DATASTORE_CHANGE = NOT_AUTHORIZED
 ARCHITECTURE_EXPLORATION = DEFER_UNTIL_CORE_TO_JOURNAL_CONSOLIDATION_FINISHES
+BOUNDED_EXCEPTION_2026_09_11 = TANK_ANALYSIS_SKILL_CONTRACT_ONLY
 ```
 
 ## Domain boundary
@@ -60,7 +61,9 @@ In particular:
 
 ## Consolidation gate
 
-Architecture exploration and implementation planning for Draneka Intelligence are intentionally **deferred until the active Core → Journal consolidation reaches a suitable terminal/qualified state**.
+Architecture exploration and implementation planning for Draneka Intelligence remain generally **deferred until the active Core → Journal consolidation reaches a suitable terminal/qualified state**.
+
+On 2026-09-11 the Founder explicitly authorized one bounded exception: design and durable custody of a versioned Tank Analysis Skill contract for Journal Assistant / ChatGPT Work analysis. This exception does not activate the skill in production and does not authorize JI runtime, datastore, provider, Android, or infrastructure changes. See `docs/architecture/EXPLORATION-GATE.md` and `docs/architecture/TANK-ANALYSIS-SKILL-BOUNDARY.md`.
 
 The consolidation work remains independently governed. This repository must not create a competing migration, datastore, or environment change while that work is active.
 
@@ -77,10 +80,27 @@ After consolidation, a fresh architecture review should examine at minimum:
 9. Privacy, bounded-context, audit, reconciliation, and failure-recovery requirements.
 10. Full-stack test/qualification strategy without production-data cloning.
 
+## Tank Analysis Skill
+
+The initial proposed package lives under `skills/draneka-tank-analysis/` and separates:
+
+- **skill/workflow contract** — how Tank questions must be analyzed;
+- **Journal evidence** — what is true about a specific Tank;
+- **Draneka aquarium knowledge** — curated domain knowledge used for interpretation;
+- **executor/provider** — the replaceable system that performs the analysis;
+- **result schema** — the machine-readable output contract.
+
+The package is currently review-only and runtime-inactive.
+
 ## Non-negotiable architectural principle
 
 > Intelligence owns intelligence execution; originating product domains own their domain meaning and authoritative records. No transient intelligence execution state becomes authoritative merely because it exists in the Intelligence domain.
 
 ## Status
 
-`FOUNDING_ARCHITECTURE_RECORDED / EXPLORATION_DEFERRED_PENDING_CONSOLIDATION`
+```text
+FOUNDING_ARCHITECTURE = RECORDED
+GENERAL_INTELLIGENCE_EXPLORATION = DEFERRED_PENDING_CONSOLIDATION
+TANK_ANALYSIS_SKILL = PROPOSED / FOUNDER_AUTHORIZED_BOUNDED_DESIGN / INDEPENDENT_REVIEW_REQUIRED
+TANK_ANALYSIS_SKILL_RUNTIME = NOT_ACTIVATED
+```

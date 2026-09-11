@@ -1,0 +1,128 @@
+{
+  "schema_version": "draneka.tank-analysis-result.v1",
+  "analysis_type": "tank_question",
+  "skill": {
+    "name": "draneka-tank-analysis",
+    "version": "0.1.0"
+  },
+  "request": {
+    "request_id": "example-stable-high-ph-001",
+    "inquiry_id": null,
+    "tank_id": "tank-example-neo",
+    "question": "My pH is 8.1. Should I lower it for my Neocaridina?",
+    "context_as_of": "2026-09-11T12:00:00Z"
+  },
+  "categories": [
+    "water_chemistry",
+    "livestock_health"
+  ],
+  "summary": "The available tank history shows a stable pH near 8.1 with no recorded livestock distress. The evidence does not justify changing pH solely to match a generic target.",
+  "evidence": [
+    {
+      "id": "E1",
+      "epistemic_state": "observed",
+      "source_class": "journal_current",
+      "statement": "Current pH is 8.1.",
+      "source_ref": "journal:water-test:latest",
+      "observed_at": "2026-09-11T09:00:00Z",
+      "reliability": "high"
+    },
+    {
+      "id": "E2",
+      "epistemic_state": "derived",
+      "source_class": "journal_history",
+      "statement": "Recent pH readings are stable around 8.0-8.2.",
+      "source_ref": "journal:water-test:trend",
+      "observed_at": null,
+      "reliability": "high"
+    },
+    {
+      "id": "E3",
+      "epistemic_state": "observed",
+      "source_class": "journal_history",
+      "statement": "Recent observations record normal feeding and no mortality.",
+      "source_ref": "journal:observations:recent",
+      "observed_at": null,
+      "reliability": "medium"
+    },
+    {
+      "id": "E4",
+      "epistemic_state": "general_knowledge",
+      "source_class": "draneka_knowledge",
+      "statement": "Abrupt parameter changes can create stress even when intended to reach a generic care range.",
+      "source_ref": "akb:parameter-stability",
+      "observed_at": null,
+      "reliability": "high"
+    }
+  ],
+  "findings": [
+    {
+      "finding": "The recorded pH is stable rather than rapidly changing.",
+      "basis": [
+        "E1",
+        "E2"
+      ],
+      "confidence": "high"
+    },
+    {
+      "finding": "No current Journal evidence indicates that pH is causing harm.",
+      "basis": [
+        "E3"
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "hypotheses": [
+    {
+      "rank": 1,
+      "hypothesis": "The current pH is acceptable for this established tank despite being above some generic care ranges.",
+      "confidence": "medium",
+      "evidence_for": [
+        "E1",
+        "E2",
+        "E3"
+      ],
+      "evidence_against": [],
+      "rationale": "Tank-specific stability and livestock observations weigh against changing a stable parameter solely to reach a generic target.",
+      "discriminator": "Reassess if new evidence appears, such as failed moults, unexplained mortality, or a meaningful parameter shift."
+    }
+  ],
+  "recommended_actions": [
+    {
+      "action": "Keep monitoring the existing pH trend rather than actively lowering pH based only on the generic target.",
+      "priority": "routine",
+      "rationale": "The tank is recorded as stable and no harm signal is present.",
+      "basis": [
+        "E1",
+        "E2",
+        "E3",
+        "E4"
+      ]
+    }
+  ],
+  "monitor": [
+    "pH trend",
+    "moulting outcomes",
+    "mortality or abnormal behavior"
+  ],
+  "missing_information": [],
+  "urgency": "low",
+  "uncertainty": {
+    "overall_confidence": "medium",
+    "limitations": [
+      "This example does not include hardness or full husbandry context; those would matter if health problems emerge."
+    ]
+  },
+  "safety_flags": [
+    "rapid_parameter_change_risk"
+  ],
+  "follow_up_questions": [],
+  "provenance": {
+    "knowledge_classes_used": [
+      "journal",
+      "draneka_knowledge"
+    ],
+    "external_sources": [],
+    "generated_at": "2026-09-11T12:01:00Z"
+  }
+}

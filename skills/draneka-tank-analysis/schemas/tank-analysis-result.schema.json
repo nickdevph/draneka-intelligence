@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:draneka:schema:tank-analysis-result:v1",
+  "title": "Draneka Tank Analysis Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_type",
+    "skill",
+    "request",
+    "categories",
+    "summary",
+    "evidence",
+    "findings",
+    "hypotheses",
+    "recommended_actions",
+    "monitor",
+    "missing_information",
+    "urgency",
+    "uncertainty",
+    "safety_flags",
+    "follow_up_questions",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "draneka.tank-analysis-result.v1"
+    },
+    "analysis_type": {
+      "const": "tank_question"
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "draneka-tank-analysis"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "question"
+      ],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inquiry_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tank_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "water_chemistry",
+          "livestock_health",
+          "livestock_behavior",
+          "compatibility_stocking",
+          "feeding_nutrition",
+          "cycling_filtration",
+          "plants",
+          "algae_microfauna",
+          "maintenance_husbandry",
+          "equipment_environment",
+          "breeding_reproduction",
+          "identification",
+          "event_investigation",
+          "general_tank_question"
+        ]
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "epistemic_state",
+          "source_class",
+          "statement"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "epistemic_state": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "derived",
+              "general_knowledge",
+              "unknown"
+            ]
+          },
+          "source_class": {
+            "type": "string",
+            "enum": [
+              "journal_current",
+              "user_observation",
+              "media",
+              "journal_history",
+              "draneka_knowledge",
+              "external_source",
+              "general_model",
+              "missing_or_conflicting"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Source reference. For source_class external_source, this is required and must equal exactly one provenance.external_sources[].id."
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reliability": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "source_class"
+              ],
+              "properties": {
+                "source_class": {
+                  "const": "external_source"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "source_ref"
+              ],
+              "properties": {
+                "source_ref": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "finding",
+          "basis",
+          "confidence"
+        ],
+        "properties": {
+          "finding": {
+            "type": "string",
+            "minLength": 1
+          },
+          "basis": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "Confidence measures evidentiary support and remaining uncertainty, not urgency: high = strongly supported by relevant consistent evidence with no material unresolved conflict; medium = meaningful support exists but missing data, indirect evidence, limitations, or plausible alternatives could materially change interpretation; low = limited, indirect, stale, conflicting, or otherwise tentative support."
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "hypothesis",
+          "confidence",
+          "evidence_for",
+          "evidence_against",
+          "rationale"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1 is the highest-supported hypothesis. Ranks must also satisfy the semantic invariant: unique, consecutive 1..N, and array order ascending by rank."
+          },
+          "hypothesis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "Confidence measures evidentiary support and remaining uncertainty, not urgency: high = strongly supported by relevant consistent evidence with no material unresolved conflict; medium = meaningful support exists but missing data, indirect evidence, limitations, or plausible alternatives could materially change interpretation; low = limited, indirect, stale, conflicting, or otherwise tentative support."
+          },
+          "evidence_for": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "evidence_against": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "discriminator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "priority",
+          "rationale",
+          "basis"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "immediate",
+              "soon",
+              "routine",
+              "optional"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "basis": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "monitor": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "urgency": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "urgent",
+        "routine",
+        "low"
+      ]
+    },
+    "uncertainty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_confidence",
+        "limitations"
+      ],
+      "properties": {
+        "overall_confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "description": "Confidence measures evidentiary support and remaining uncertainty, not urgency: high = strongly supported by relevant consistent evidence with no material unresolved conflict; medium = meaningful support exists but missing data, indirect evidence, limitations, or plausible alternatives could materially change interpretation; low = limited, indirect, stale, conflicting, or otherwise tentative support."
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "safety_flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "acute_water_quality_risk",
+          "oxygenation_risk",
+          "temperature_risk",
+          "contamination_risk",
+          "rapid_parameter_change_risk",
+          "treatment_or_additive_risk",
+          "livestock_distress",
+          "predation_or_compatibility_risk",
+          "insufficient_data_for_intervention"
+        ]
+      }
+    },
+    "follow_up_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "knowledge_classes_used",
+        "generated_at"
+      ],
+      "properties": {
+        "knowledge_classes_used": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "journal",
+              "user_observation",
+              "media",
+              "draneka_knowledge",
+              "external_source",
+              "general_model"
+            ]
+          }
+        },
+        "external_sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "reference"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable external-source provenance identifier. IDs must be unique within the result."
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reference": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retrieved_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "evidence"
+        ],
+        "properties": {
+          "evidence": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "source_class"
+              ],
+              "properties": {
+                "source_class": {
+                  "const": "external_source"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "required": [
+              "external_sources"
+            ],
+            "properties": {
+              "external_sources": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "provenance"
+        ],
+        "properties": {
+          "provenance": {
+            "required": [
+              "knowledge_classes_used"
+            ],
+            "properties": {
+              "knowledge_classes_used": {
+                "contains": {
+                  "const": "external_source"
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "required": [
+              "external_sources"
+            ],
+            "properties": {
+              "external_sources": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
