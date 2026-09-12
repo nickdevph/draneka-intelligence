@@ -629,6 +629,8 @@ $$;
 
 drop trigger if exists intelligence_schema_migrations_immutable
   on intelligence.schema_migrations;
+drop trigger if exists intelligence_schema_migrations_truncate_guard
+  on intelligence.schema_migrations;
 
 create trigger intelligence_schema_migrations_immutable
   before update or delete on intelligence.schema_migrations
