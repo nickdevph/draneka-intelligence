@@ -167,7 +167,18 @@ where owner_role.rolname = 'intelligence_migrator'
   and d.defaclobjtype = 'f'
 order by default_scope, grantee, acl.privilege_type;
 
--- 7. Ledger grants.
+-- 7. Column-level ACL readback: the foundation contract grants no columns directly.
+select
+  a.attnum,
+  a.attname,
+  a.attacl
+from pg_attribute a
+where a.attrelid = 'intelligence.schema_migrations'::regclass
+  and a.attnum > 0
+  and not a.attisdropped
+order by a.attnum;
+
+-- 8. Ledger grants.
 select
   coalesce(grantee_role.rolname, 'PUBLIC') as grantee,
   acl.privilege_type,
@@ -180,12 +191,12 @@ where n.nspname = 'intelligence'
   and c.relname = 'schema_migrations'
 order by grantee, acl.privilege_type;
 
--- 8. Native migration identity. Source lineage is evidence only.
+-- 9. Native migration identity. Source lineage is evidence only.
 select version, contract_family, source_lineage, applied_at
 from intelligence.schema_migrations
 order by version;
 
--- 9. Cross-domain/end-user direct-access negative readback.
+-- 10. Cross-domain/end-user direct-access negative readback.
 select
   r.rolname,
   has_schema_privilege(r.rolname, 'intelligence', 'USAGE') as has_schema_usage,
@@ -199,7 +210,7 @@ from pg_roles r
 where r.rolname in ('journal_runtime', 'anon', 'authenticated')
 order by r.rolname;
 
--- 10. Exact-contract assertions. Any mismatch aborts qualification.
+-- 11. Exact-contract assertions. Any mismatch aborts qualification.
 do $$
 declare
   ledger_oid oid := 'intelligence.schema_migrations'::regclass;
@@ -556,6 +567,17 @@ begin
 
   if exists (
     select 1
+    from pg_attribute a
+    where a.attrelid = ledger_oid
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.attacl is not null
+  ) then
+    raise exception 'FAIL: schema_migrations column-level ACL exactness';
+  end if;
+
+  if exists (
+    select 1
     from pg_class c
     cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) acl
     left join pg_roles grantee_role on grantee_role.oid = acl.grantee
@@ -612,6 +634,14 @@ begin
       and acl.privilege_type = 'SELECT'
   ) then
     raise exception 'FAIL: schema_migrations required table grants';
+  end if;
+
+  if exists (
+    select 1
+    from pg_rewrite rw
+    where rw.ev_class = ledger_oid
+  ) then
+    raise exception 'FAIL: unexpected schema_migrations rewrite rule';
   end if;
 
   if (select count(*) from intelligence.schema_migrations) <> 1
