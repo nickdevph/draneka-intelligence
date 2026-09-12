@@ -611,6 +611,38 @@ begin
 end
 $$;
 
+-- Reject rewrite rules that could suppress or redirect the native ledger insert.
+do $
+begin
+  if exists (
+    select 1
+    from pg_rewrite rw
+    where rw.ev_class = 'intelligence.schema_migrations'::regclass
+  ) then
+    raise exception 'Unexpected rewrite rule on intelligence.schema_migrations';
+  end if;
+end
+$;
+
+-- Reject column-level ACL drift. The foundation contract has no column grants.
+do $
+begin
+  if exists (
+    select 1
+    from pg_attribute a
+    join pg_class c on c.oid = a.attrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'intelligence'
+      and c.relname = 'schema_migrations'
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.attacl is not null
+  ) then
+    raise exception 'Unexpected column-level ACL on intelligence.schema_migrations';
+  end if;
+end
+$;
+
 -- Reject unknown table ACL holders before converging grants.
 do $$
 begin
@@ -751,6 +783,7 @@ do $$
 declare
   existing_contract text;
   existing_lineage text;
+  inserted_version integer;
 begin
   select contract_family, source_lineage
     into existing_contract, existing_lineage
@@ -764,9 +797,14 @@ begin
     end if;
   else
     insert into intelligence.schema_migrations(version, contract_family, source_lineage)
-    values (1, 'DRANEKA_INTELLIGENCE_SUPABASE_FOUNDATION_001', 'TRANSITIONAL_JI_NEON_17_23');
+    values (1, 'DRANEKA_INTELLIGENCE_SUPABASE_FOUNDATION_001', 'TRANSITIONAL_JI_NEON_17_23')
+    returning version into inserted_version;
+
+    if not found or inserted_version is distinct from 1 then
+      raise exception 'Intelligence foundation migration identity insert was suppressed or altered';
+    end if;
   end if;
 end
-$$;
+$;
 
 commit;
