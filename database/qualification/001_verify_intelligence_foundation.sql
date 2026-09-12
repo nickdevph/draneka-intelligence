@@ -493,6 +493,20 @@ begin
     raise exception 'FAIL: immutable function identity/security';
   end if;
 
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'intelligence'
+      and p.proname = 'reject_immutable_mutation'
+      and pg_get_function_identity_arguments(p.oid) = ''
+      and btrim(p.prosrc) = $body$begin
+  raise exception 'Draneka Intelligence immutable record cannot be updated or deleted';
+end$body$
+  ) then
+    raise exception 'FAIL: immutable function body exactness';
+  end if;
+
   if has_function_privilege('intelligence_runtime', 'intelligence.reject_immutable_mutation()', 'EXECUTE') then
     raise exception 'FAIL: runtime can execute immutable guard function directly';
   end if;
