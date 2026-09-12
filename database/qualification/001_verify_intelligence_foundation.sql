@@ -570,7 +570,7 @@ begin
     where n.nspname = 'intelligence'
       and p.proname = 'reject_immutable_mutation'
       and pg_get_function_identity_arguments(p.oid) = ''
-      and btrim(p.prosrc) = $body$begin
+      and btrim(p.prosrc, E' \t\r\n') = $body$begin
   raise exception 'Draneka Intelligence immutable record cannot be updated or deleted';
 end$body$
   ) then
