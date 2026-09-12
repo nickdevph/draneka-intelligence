@@ -890,23 +890,24 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-  IF current_user = 'intelligence_runtime'
+  IF pg_has_role(current_user, 'intelligence_runtime', 'member')
      AND OLD.state = 'READY'
      AND NEW.state <> 'CLAIMED' THEN
     RAISE EXCEPTION 'Runtime can only claim a READY execution attempt';
   END IF;
-  IF current_user = 'intelligence_runtime'
+  IF pg_has_role(current_user, 'intelligence_runtime', 'member')
      AND OLD.state = 'READY'
      AND NEW.state = 'CLAIMED'
      AND current_setting('app.intelligence_work_identity', true) IS DISTINCT FROM NEW.claimed_by THEN
     RAISE EXCEPTION 'Execution attempt claim requires the claiming worker identity';
   END IF;
   IF NEW.state = 'EXPIRED'
-     AND current_user NOT IN ('intelligence_migrator', 'intelligence_recovery_admin')
+     AND current_user <> 'intelligence_migrator'
+     AND NOT pg_has_role(current_user, 'intelligence_recovery_admin', 'member')
      AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND rolsuper) THEN
     RAISE EXCEPTION 'Execution attempt expiry requires the recovery authority';
   END IF;
-  IF current_user = 'intelligence_runtime'
+  IF pg_has_role(current_user, 'intelligence_runtime', 'member')
      AND OLD.state IN ('CLAIMED', 'PROCESSING')
      AND current_setting('app.intelligence_work_identity', true) IS DISTINCT FROM OLD.claimed_by THEN
     RAISE EXCEPTION 'Execution attempt update requires the current claim owner';
@@ -1000,7 +1001,7 @@ BEGIN
   IF NOT FOUND OR attempt_row.execution_job_id IS DISTINCT FROM NEW.execution_job_id THEN
     RAISE EXCEPTION 'Execution result must reference an attempt from the same job';
   END IF;
-  IF current_user = 'intelligence_runtime'
+  IF pg_has_role(current_user, 'intelligence_runtime', 'member')
      AND current_setting('app.intelligence_work_identity', true) IS DISTINCT FROM attempt_row.claimed_by THEN
     RAISE EXCEPTION 'Execution result insert requires the current claim owner';
   END IF;
@@ -1342,7 +1343,7 @@ BEGIN
   END IF;
   IF NEW.browser_result_capability_used_at IS NOT NULL
      AND OLD.browser_result_capability_used_at IS NULL
-     AND current_user = 'intelligence_runtime'
+     AND pg_has_role(current_user, 'intelligence_runtime', 'member')
      AND current_setting('app.intelligence_work_identity', true) IS DISTINCT FROM OLD.claimed_by THEN
     RAISE EXCEPTION 'Browser result capability consumption requires the current claim owner';
   END IF;
