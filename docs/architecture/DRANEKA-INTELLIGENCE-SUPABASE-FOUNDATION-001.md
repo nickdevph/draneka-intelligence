@@ -114,15 +114,21 @@ Target role family:
 intelligence_runtime
 intelligence_migrator
 intelligence_recovery_admin
+intelligence_app
+intelligence_recovery_app
 ```
 
 Required properties:
 
-- NOLOGIN by default;
+- `intelligence_runtime`, `intelligence_migrator` and `intelligence_recovery_admin` are NOLOGIN capability/administrative roles;
+- `intelligence_app` is the dedicated LOGIN application identity and receives authority only through `intelligence_runtime`;
+- `intelligence_recovery_app` is the dedicated LOGIN recovery identity and receives authority only through `intelligence_recovery_admin`;
 - NOBYPASSRLS;
-- NOINHERIT;
+- capability/administrative roles are NOINHERIT; the two dedicated LOGIN identities are INHERIT only so they can use their exact capability membership;
 - no SUPERUSER / CREATEDB / CREATEROLE / REPLICATION privileges;
-- no role memberships into or out of the `intelligence_*` role family are authorized by this foundation;
+- the dedicated LOGIN identities are INHERIT and have no direct schema/table grants;
+- no Journal role may receive Intelligence privileges or membership in `intelligence_runtime`;
+- no role memberships other than the exact provider/migration edges and the two dedicated capability edges are authorized;
 - explicit schema/table/function grants only;
 - no implicit inheritance from `journal_runtime`;
 - no use of Journal roles as Intelligence execution authority;
