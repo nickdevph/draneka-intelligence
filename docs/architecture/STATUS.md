@@ -6,16 +6,21 @@ INTELLIGENCE_PEER_DOMAIN = YES
 INTELLIGENCE_INBOX = DOMAIN_SURFACE
 FOUNDATION_PROGRAMME = ACTIVE_FOUNDER_AUTHORIZED
 FOUNDATION_TASK = DRANEKA_INTELLIGENCE_SUPABASE_FOUNDATION_001
+FOUNDATION_REVIEW = CHANGES_REQUIRED_CORRECTED_PENDING_FRESH_REVIEW
+FOUNDATION_CORRECTION_SCOPE = BOUNDED_6_ITEMS
 CANONICAL_PHYSICAL_TARGET = SUPABASE_sjodccpuyaasljcunmug
 CANONICAL_SCHEMA = intelligence
+CANONICAL_OBJECT_CREATOR = intelligence_migrator
 TRANSITIONAL_JI_PRODUCTION = NEON_sparkling-thunder-53335766
+SOURCE_LINEAGE_17_23 = EVIDENCE_ONLY
 PRODUCTION_DDL = NOT_AUTHORIZED
 PRODUCTION_DATA_MIGRATION = NOT_AUTHORIZED
 RUNTIME_CUTOVER = NOT_AUTHORIZED
 ACTIVE_JI_RUNTIME_CHANGE = NO
 ACTIVE_DATASTORE_CHANGE = NO
 EXISTING_INTELLIGENCE_WORK_CUSTODY = PRESERVED
-NEXT_GATE = FRESH_INDEPENDENT_EXACT_HEAD_REVIEW
+NEXT_GATE = FRESH_INDEPENDENT_EXACT_HEAD_TREE_REVIEW
+DI_1_ISOLATED_BOOTSTRAP = BLOCKED_UNTIL_REVIEW_PASS
 ```
 
-Founder explicitly reopened the repository on 2026-09-12 for a bounded Supabase foundation programme before Core → Journal production cutover. This does not authorize production mutation or live JI cutover.
+Founder explicitly reopened the repository on 2026-09-12 for a bounded Supabase foundation programme before Core → Journal production cutover. The first independent foundation review returned `CHANGES_REQUIRED` with five blocking findings and no non-blocking findings. The bounded correction candidate addresses only the enumerated security/exactness, qualification, and source-lineage ambiguities. It does not authorize production mutation or live JI cutover.

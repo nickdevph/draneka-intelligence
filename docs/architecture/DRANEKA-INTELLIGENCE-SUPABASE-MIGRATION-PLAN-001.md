@@ -10,6 +10,8 @@ Move current Journal Intelligence production persistence from the transitional N
 
 This plan deliberately separates **foundation**, **rehearsal**, **target bootstrap**, **data cutover**, and **runtime switch** so no documentation merge can accidentally authorize production effects.
 
+Transitional Neon schema migration versions `17–23` are historical source lineage only. They are not target migration identities and must not be copied into the native `intelligence.schema_migrations.version` namespace.
+
 ## 2. Phases
 
 ### DI-0 — Foundation boundary
@@ -40,13 +42,16 @@ Execute the reviewed target bootstrap only in an isolated non-production databas
 
 Prove:
 - `intelligence` schema creation;
-- dedicated `intelligence_*` roles;
+- exact `intelligence_*` role attributes and zero unauthorized memberships;
+- exact namespace and migration-ledger ownership/ACL/constraint state;
 - zero grants to `anon`/`authenticated` on internal tables;
-- RLS enabled;
+- exact policy and immutable-trigger definitions;
+- RLS/FORCE RLS state where defined;
+- the dedicated `intelligence_migrator` creator role has a global future-function default privilege revoking PUBLIC EXECUTE (required because per-schema defaults cannot subtract the creator's global function default);
 - required table/constraint/index/function/trigger parity;
 - runtime role cannot cross-write Journal domain tables;
 - Journal runtime cannot assume Intelligence ownership implicitly;
-- schema bootstrap is deterministic and repeatable.
+- schema bootstrap is deterministic and repeatable or fails closed on incompatible drift.
 
 No production effects.
 
@@ -63,7 +68,7 @@ Prove:
 - PK/FK/reference integrity;
 - no orphan request/context/job/attempt/result chain;
 - immutable/audit rows retained;
-- source migration lineage retained as evidence;
+- source migration lineage 17–23 retained as evidence only, never copied into native target migration numbering;
 - replay of the same migration is idempotent or explicitly fails closed without divergence;
 - no Journal-owned source records are copied as Intelligence authority.
 
@@ -110,9 +115,10 @@ Apply the independently reviewed **empty target** schema/role package to Supabas
 No live JI data movement and no runtime switch in the same step.
 
 Required readback:
-- exact migration identity;
+- exact native migration identity;
 - exact schema objects;
-- exact grants/RLS/policies;
+- exact role attributes/memberships;
+- exact ownership/grants/RLS/policies/triggers/default privileges;
 - zero accidental grants to peer-domain roles;
 - zero Journal data mutation;
 - zero current runtime traffic to target.
@@ -163,25 +169,29 @@ After that boundary:
 - merely keeping Neon online is not lossless rollback;
 - reverse-delta or another qualified recovery path is required.
 
-## 4. Table migration order
+## 4. Data migration order
 
-Recommended dependency-aware order:
+`intelligence.schema_migrations` is **not** a source data-migration target. The native target ledger is established independently by target migrations, beginning with version `1 = DRANEKA_INTELLIGENCE_SUPABASE_FOUNDATION_001`.
+
+Source `public.journal_ji_schema_migrations` versions `17–23` are retained only as lineage evidence through `source_lineage` or a separately immutable evidence receipt. They are not inserted into the target `version` column.
+
+Recommended dependency-aware data order:
 
 ```text
-1. schema_migrations
-2. provider_admissions
-3. system_trigger_admissions
-4. analysis_requests
-5. analysis_context_bindings
-6. intake_events
-7. intake_evidence_items
-8. intake_decision_receipts
-9. deterministic_opportunities
-10. deterministic_qualifications
-11. execution_jobs
-12. execution_attempts
-13. execution_results
-14. final attempt result references / acceptance state verification
+1. provider_admissions
+2. system_trigger_admissions
+3. analysis_requests
+4. analysis_context_bindings
+5. intake_events
+6. intake_evidence_items
+7. intake_decision_receipts
+8. deterministic_opportunities
+9. deterministic_qualifications
+10. execution_jobs
+11. execution_attempts
+12. execution_results
+13. final attempt result references / acceptance state verification
+14. source-lineage evidence receipt verification
 ```
 
 Where cyclic result/attempt FKs make direct insert ordering awkward, use one of these reviewed strategies in rehearsal:
@@ -217,7 +227,15 @@ At minimum prove:
 | `authenticated` | NO direct internal-table access | NO | existing Journal policy only |
 | `anon` | NO | NO | existing public contract only |
 
-Service/superuser capabilities must not be treated as ordinary application authorization evidence.
+Additional foundation checks:
+- all `intelligence_*` roles are NOLOGIN/NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOINHERIT/NOREPLICATION/NOBYPASSRLS;
+- no foundation-authorized role memberships exist into or out of the `intelligence_*` role family;
+- `intelligence_migrator` is the canonical schema/object owner and future object creator;
+- incompatible pre-existing schema/ledger ownership or structure fails closed;
+- known stale grants/policies are converged to the exact allowlist; unknown security state fails closed;
+- the immutable ledger trigger is exact in event set, timing and function identity;
+- future functions created by the dedicated `intelligence_migrator` role do not inherit PUBLIC EXECUTE, enforced through the creator-role global default privilege;
+- service/superuser capabilities are not treated as ordinary application authorization evidence.
 
 ## 7. Migration evidence package
 
@@ -240,8 +258,12 @@ TARGET_MIGRATION_ID
 TARGET_ROW_COUNTS
 TARGET_DIGESTS
 TARGET_ROLE_READBACK
+TARGET_ROLE_MEMBERSHIP_READBACK
+TARGET_OWNER_ACL_READBACK
 TARGET_RLS_READBACK
+TARGET_POLICY_READBACK
 TARGET_FUNCTION_TRIGGER_READBACK
+TARGET_DEFAULT_PRIVILEGE_READBACK
 
 RUNTIME_SOURCE_SHA
 RUNTIME_TARGET_IDENTITY
@@ -259,6 +281,8 @@ No secrets or credential values in durable receipts.
 
 Stop rather than improvise if:
 - source and target schema semantics cannot be reconciled deterministically;
+- existing `intelligence_*` roles have incompatible attributes or memberships;
+- existing namespace/ledger ownership, shape or ACL state is incompatible and not a specifically recognized convergent prior-candidate state;
 - current production writer inventory is incomplete;
 - account/Tank ownership cannot be proven;
 - provider admission semantics would weaken;
@@ -292,8 +316,10 @@ Foundation planning is complete when:
 ```text
 NAMESPACE_BOUNDARY = DEFINED
 ROLE_BOUNDARY = DEFINED
+ROLE_DRIFT_FAIL_CLOSED = YES
 SOURCE_INVENTORY = COMPLETE
 TABLE_MAPPING = COMPLETE
+SOURCE_LINEAGE_17_23 = EVIDENCE_ONLY
 SECURITY_MATRIX = DEFINED
 MIGRATION_ORDER = DEFINED
 ONE_WAY_BOUNDARY = DEFINED

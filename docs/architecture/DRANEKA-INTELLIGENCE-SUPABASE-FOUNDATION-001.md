@@ -106,7 +106,7 @@ Do not place new Draneka Intelligence execution tables in Journal's `public` nam
 
 The `intelligence` schema is a logical-security boundary inside the shared physical project, not a separate Supabase project.
 
-## 5. Role boundary
+## 5. Role and object-ownership boundary
 
 Target role family:
 
@@ -120,14 +120,28 @@ Required properties:
 
 - NOLOGIN by default;
 - NOBYPASSRLS;
+- NOINHERIT;
 - no SUPERUSER / CREATEDB / CREATEROLE / REPLICATION privileges;
+- no role memberships into or out of the `intelligence_*` role family are authorized by this foundation;
 - explicit schema/table/function grants only;
 - no implicit inheritance from `journal_runtime`;
 - no use of Journal roles as Intelligence execution authority;
 - no direct grants to `anon` or `authenticated` for execution-internal tables;
 - no provider credential values stored in ordinary lifecycle rows.
 
-The application/deployment mechanism that assumes one of these roles must be separately qualified. This document does not authorize credentials or environment-variable changes.
+Foundation object-ownership contract:
+
+```text
+SCHEMA_OWNER = intelligence_migrator
+FOUNDATION_LEDGER_OWNER = intelligence_migrator
+FUTURE_INTELLIGENCE_OBJECT_CREATOR = intelligence_migrator
+```
+
+The migrator is an administrative DDL identity, not an application runtime identity. Foundation objects use FORCE RLS where applicable so ordinary DML through the migrator identity remains policy-governed even though it owns the objects.
+
+Every future Intelligence migration that creates objects in `intelligence` must create them as `intelligence_migrator` (for example through a separately qualified SET ROLE path). The foundation establishes a creator-role global default privilege that revokes PostgreSQL's PUBLIC EXECUTE default for every future function created by the dedicated `intelligence_migrator` role. PostgreSQL per-schema defaults cannot safely subtract a creator's global function default, so the revocation is deliberately attached to the dedicated creator role rather than only to one schema. Function execution is granted only when an individual migration explicitly requires it.
+
+The application/deployment mechanism that assumes one of these roles must be separately qualified. This document does not authorize credentials, role memberships, or environment-variable changes.
 
 ## 6. Compatibility-first target model
 
@@ -151,7 +165,9 @@ Canonical source→target table mapping:
 | `public.journal_ji_intake_decision_receipts` | `intelligence.intake_decision_receipts` |
 | `public.journal_ji_provider_admissions` | `intelligence.provider_admissions` |
 | `public.journal_ji_system_trigger_admissions` | `intelligence.system_trigger_admissions` |
-| `public.journal_ji_schema_migrations` | `intelligence.schema_migrations` |
+| `public.journal_ji_schema_migrations` | **No row-for-row ledger import. Versions 17–23 are evidence lineage only and are preserved through the native target ledger's `source_lineage` field or a separately immutable lineage/evidence receipt.** |
+
+The target `intelligence.schema_migrations.version` namespace is native Draneka Intelligence migration authority. Foundation version `1` is the first native target migration identity. Transitional Neon versions `17–23` must **not** be inserted as target migration versions.
 
 Do not migrate `public.journal_tanks` into `intelligence`.
 
@@ -223,13 +239,15 @@ Do not preserve Journal role names merely to avoid updating the runtime. Runtime
 Initial target contract:
 
 - RLS enabled on all Intelligence lifecycle tables;
+- FORCE RLS on foundation-owned append-only ledger objects whose owner is `intelligence_migrator`;
 - backend role policies only;
 - `anon` = no schema/table access;
 - `authenticated` = no direct execution-table access;
 - `intelligence_runtime` receives only runtime-required CRUD per table;
 - provider/system-trigger admissions and schema metadata are read-only to runtime unless the contract explicitly requires more;
-- `intelligence_migrator` owns governed migration/admission effects;
+- `intelligence_migrator` owns governed migration/admission effects and is the canonical object creator;
 - `intelligence_recovery_admin` receives bounded recovery access;
+- PUBLIC receives no direct schema/table privileges and no default EXECUTE on future functions created by the dedicated `intelligence_migrator` creator role;
 - service-role/superuser access is not treated as the ordinary runtime contract.
 
 End-user read models, if required, should be exposed through reviewed domain APIs/views rather than direct broad grants to execution internals.
@@ -273,7 +291,12 @@ Foundation is ready for independent review only when it provides:
 SOURCE_INVENTORY = COMPLETE
 TARGET_NAMESPACE = DEFINED
 ROLE_BOUNDARY = DEFINED
+ROLE_DRIFT_FAIL_CLOSED = YES
+SCHEMA_LEDGER_DRIFT_FAIL_CLOSED = YES
+POLICY_TRIGGER_ACL_RERUN_EXACT = YES
+FUTURE_FUNCTION_DEFAULT_EXECUTE_PUBLIC = REVOKED
 TABLE_MAPPING = COMPLETE
+SOURCE_LINEAGE_17_23 = EVIDENCE_ONLY
 JOURNAL_OWNERSHIP_BOUNDARY = DEFINED
 SOURCE_INVARIANTS = RECORDED
 MIGRATION_SEQUENCE = DEFINED
@@ -292,6 +315,7 @@ This document does not authorize:
 - Neon writes, deletion or retirement;
 - JI runtime activation or traffic switch;
 - environment/credential changes;
+- role-assumption membership changes;
 - provider change;
 - Android modification;
 - Journal source-domain writes;
@@ -305,7 +329,9 @@ SHARED_PHYSICAL_PROJECT = sjodccpuyaasljcunmug
 CANONICAL_SCHEMA = intelligence
 TRANSITIONAL_JI_SOURCE = NEON
 TARGET_ROLE_FAMILY = intelligence_*
+CANONICAL_OBJECT_CREATOR = intelligence_migrator
 SOURCE_TO_TARGET_MAPPING = DEFINED
+SOURCE_LINEAGE_17_23 = EVIDENCE_ONLY
 PRODUCTION_DDL = NOT_AUTHORIZED
 RUNTIME_CUTOVER = NOT_AUTHORIZED
 NEON_RETIREMENT = NOT_AUTHORIZED
