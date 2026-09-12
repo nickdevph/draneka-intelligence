@@ -316,7 +316,20 @@ begin
     )
       and not (
         member_role.rolname = 'postgres'
-        and grantor_role.rolname = 'supabase_admin'
+        and (
+          (
+            grantor_role.rolname = 'supabase_admin'
+            and m.admin_option
+            and not m.inherit_option
+            and not m.set_option
+          )
+          or (
+            grantor_role.rolname = 'postgres'
+            and not m.admin_option
+            and m.inherit_option
+            and m.set_option
+          )
+        )
       )
   ) then
     raise exception 'FAIL: unexpected non-provider intelligence_* role membership';

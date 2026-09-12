@@ -8,8 +8,9 @@ begin;
 
 -- Dedicated peer-domain roles. Existing roles are accepted only if they exactly match
 -- the foundation contract. Supabase reserves a provider-managed membership from
--- postgres into newly-created roles, so that one exact platform edge is accepted;
--- no application-role membership is authorized by this foundation.
+-- postgres into newly-created roles with SET ROLE disabled. The migration adds a
+-- second exact postgres edge with SET ROLE enabled so the dedicated owner role can
+-- create/own the schema. No application-role membership is authorized here.
 do $$
 declare
   expected_role text;
@@ -44,6 +45,20 @@ begin
     end if;
   end loop;
 
+  -- Supabase grants postgres membership with set_option=false. Add the narrow,
+  -- migration-controlled SET ROLE edge required by CREATE SCHEMA AUTHORIZATION.
+  if current_user = 'postgres'
+     and exists (select 1 from pg_roles where rolname = 'supabase_admin') then
+    foreach expected_role in array array[
+      'intelligence_runtime',
+      'intelligence_migrator',
+      'intelligence_recovery_admin'
+    ]
+    loop
+      execute format('grant %I to postgres with set true', expected_role);
+    end loop;
+  end if;
+
   if exists (
     select 1
     from pg_auth_members m
@@ -64,7 +79,20 @@ begin
     )
       and not (
         member_role.rolname = 'postgres'
-        and grantor_role.rolname = 'supabase_admin'
+        and (
+          (
+            grantor_role.rolname = 'supabase_admin'
+            and m.admin_option
+            and not m.inherit_option
+            and not m.set_option
+          )
+          or (
+            grantor_role.rolname = 'postgres'
+            and not m.admin_option
+            and m.inherit_option
+            and m.set_option
+          )
+        )
       )
   ) then
     raise exception 'Unexpected non-provider role membership involving intelligence_* role';
@@ -86,7 +114,12 @@ begin
   where n.nspname = 'intelligence';
 
   if not found then
-    execute 'create schema intelligence authorization intelligence_migrator';
+    -- Supabase does not let the provider-granted owner role create a schema
+    -- directly because it has no database CREATE privilege. Create the empty
+    -- namespace as the migration executor, then transfer ownership through the
+    -- exact SET-enabled membership established above.
+    execute 'create schema intelligence';
+    execute 'alter schema intelligence owner to intelligence_migrator';
   elsif existing_owner <> 'intelligence_migrator' then
     raise exception 'Existing intelligence schema owner mismatch: %', existing_owner;
   end if;
