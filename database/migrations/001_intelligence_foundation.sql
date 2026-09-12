@@ -7,7 +7,9 @@
 begin;
 
 -- Dedicated peer-domain roles. Existing roles are accepted only if they exactly match
--- the foundation contract. No role memberships are authorized by this foundation.
+-- the foundation contract. Supabase reserves a provider-managed membership from
+-- postgres into newly-created roles, so that one exact platform edge is accepted;
+-- no application-role membership is authorized by this foundation.
 do $$
 declare
   expected_role text;
@@ -47,18 +49,25 @@ begin
     from pg_auth_members m
     join pg_roles granted_role on granted_role.oid = m.roleid
     join pg_roles member_role on member_role.oid = m.member
-    where granted_role.rolname = any (array[
-            'intelligence_runtime',
-            'intelligence_migrator',
-            'intelligence_recovery_admin'
-          ])
+    join pg_roles grantor_role on grantor_role.oid = m.grantor
+    where (
+      granted_role.rolname = any (array[
+              'intelligence_runtime',
+              'intelligence_migrator',
+              'intelligence_recovery_admin'
+            ])
        or member_role.rolname = any (array[
-            'intelligence_runtime',
-            'intelligence_migrator',
-            'intelligence_recovery_admin'
-          ])
+              'intelligence_runtime',
+              'intelligence_migrator',
+              'intelligence_recovery_admin'
+            ])
+    )
+      and not (
+        member_role.rolname = 'postgres'
+        and grantor_role.rolname = 'supabase_admin'
+      )
   ) then
-    raise exception 'Unexpected role membership involving intelligence_* role';
+    raise exception 'Unexpected non-provider role membership involving intelligence_* role';
   end if;
 end
 $$;

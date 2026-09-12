@@ -301,18 +301,25 @@ begin
     from pg_auth_members m
     join pg_roles granted_role on granted_role.oid = m.roleid
     join pg_roles member_role on member_role.oid = m.member
-    where granted_role.rolname in (
-            'intelligence_runtime',
-            'intelligence_migrator',
-            'intelligence_recovery_admin'
-          )
+    join pg_roles grantor_role on grantor_role.oid = m.grantor
+    where (
+      granted_role.rolname in (
+              'intelligence_runtime',
+              'intelligence_migrator',
+              'intelligence_recovery_admin'
+            )
        or member_role.rolname in (
-            'intelligence_runtime',
-            'intelligence_migrator',
-            'intelligence_recovery_admin'
-          )
+              'intelligence_runtime',
+              'intelligence_migrator',
+              'intelligence_recovery_admin'
+            )
+    )
+      and not (
+        member_role.rolname = 'postgres'
+        and grantor_role.rolname = 'supabase_admin'
+      )
   ) then
-    raise exception 'FAIL: unexpected intelligence_* role membership';
+    raise exception 'FAIL: unexpected non-provider intelligence_* role membership';
   end if;
 
   if not exists (
