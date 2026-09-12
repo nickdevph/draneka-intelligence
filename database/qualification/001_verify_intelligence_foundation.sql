@@ -59,6 +59,33 @@ left join pg_roles grantee_role on grantee_role.oid = acl.grantee
 where n.nspname = 'intelligence'
 order by grantee, acl.privilege_type;
 
+-- Exact namespace object inventory. Only the foundation-owned relation, its primary-key
+-- index, composite row/array types, and immutable guard function may exist.
+select
+  'relation' as object_kind,
+  c.relname as object_name,
+  c.relkind::text as object_type
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'intelligence'
+union all
+select
+  'function' as object_kind,
+  p.oid::regprocedure::text as object_name,
+  'function' as object_type
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'intelligence'
+union all
+select
+  'type' as object_kind,
+  t.typname as object_name,
+  t.typtype::text as object_type
+from pg_type t
+join pg_namespace n on n.oid = t.typnamespace
+where n.nspname = 'intelligence'
+order by object_kind, object_name;
+
 -- 3. Native migration ledger structure, ownership, RLS and constraints.
 select
   c.oid::regclass as relation,
@@ -217,6 +244,39 @@ declare
   ledger_owner text;
   default_expr text;
 begin
+  if exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'intelligence'
+      and c.relname not in ('schema_migrations', 'schema_migrations_pkey')
+  ) then
+    raise exception 'FAIL: unexpected relation in intelligence schema';
+  end if;
+
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'intelligence'
+      and not (
+        p.proname = 'reject_immutable_mutation'
+        and pg_get_function_identity_arguments(p.oid) = ''
+      )
+  ) then
+    raise exception 'FAIL: unexpected function in intelligence schema';
+  end if;
+
+  if exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'intelligence'
+      and t.typname not in ('schema_migrations', '_schema_migrations')
+  ) then
+    raise exception 'FAIL: unexpected type in intelligence schema';
+  end if;
+
   if (
     select count(*)
     from pg_roles
@@ -462,7 +522,7 @@ begin
     from pg_trigger t
     where t.tgrelid = ledger_oid
       and not t.tgisinternal
-  ) <> 1
+  ) <> 2
   or not exists (
     select 1
     from pg_trigger t
@@ -471,6 +531,16 @@ begin
       and t.tgname = 'intelligence_schema_migrations_immutable'
       and t.tgfoid = 'intelligence.reject_immutable_mutation()'::regprocedure
       and t.tgtype = 27
+      and t.tgenabled = 'O'
+  )
+  or not exists (
+    select 1
+    from pg_trigger t
+    where t.tgrelid = ledger_oid
+      and not t.tgisinternal
+      and t.tgname = 'intelligence_schema_migrations_truncate_guard'
+      and t.tgfoid = 'intelligence.reject_immutable_mutation()'::regprocedure
+      and t.tgtype = 34
       and t.tgenabled = 'O'
   ) then
     raise exception 'FAIL: immutable trigger exactness';
