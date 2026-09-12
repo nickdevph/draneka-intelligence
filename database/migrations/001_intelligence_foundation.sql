@@ -156,6 +156,46 @@ $$;
 comment on schema intelligence is
   'Draneka Intelligence peer-domain persistence boundary on the shared Draneka Supabase project.';
 
+-- Existing Intelligence namespaces are accepted only when their object inventory is
+-- exactly the foundation-owned set. Unknown relations, types or functions fail closed
+-- before any grants or ledger state can be certified.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'intelligence'
+      and c.relname not in ('schema_migrations', 'schema_migrations_pkey')
+  ) then
+    raise exception 'Unexpected relation in intelligence schema';
+  end if;
+
+  if exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'intelligence'
+      and not (
+        p.proname = 'reject_immutable_mutation'
+        and pg_get_function_identity_arguments(p.oid) = ''
+      )
+  ) then
+    raise exception 'Unexpected function in intelligence schema';
+  end if;
+
+  if exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'intelligence'
+      and t.typname not in ('schema_migrations', '_schema_migrations')
+  ) then
+    raise exception 'Unexpected type in intelligence schema';
+  end if;
+end
+$$;
+
 -- Fail closed if an existing migration ledger has incompatible type/owner/shape.
 do $$
 declare
@@ -577,7 +617,10 @@ begin
     where not t.tgisinternal
       and n.nspname = 'intelligence'
       and c.relname = 'schema_migrations'
-      and t.tgname <> 'intelligence_schema_migrations_immutable'
+      and t.tgname not in (
+        'intelligence_schema_migrations_immutable',
+        'intelligence_schema_migrations_truncate_guard'
+      )
   ) then
     raise exception 'Unexpected non-internal trigger on intelligence.schema_migrations';
   end if;
@@ -591,9 +634,22 @@ create trigger intelligence_schema_migrations_immutable
   before update or delete on intelligence.schema_migrations
   for each row execute function intelligence.reject_immutable_mutation();
 
+create trigger intelligence_schema_migrations_truncate_guard
+  before truncate on intelligence.schema_migrations
+  for each statement execute function intelligence.reject_immutable_mutation();
+
 do $$
 begin
-  if not exists (
+  if (
+    select count(*)
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where not t.tgisinternal
+      and n.nspname = 'intelligence'
+      and c.relname = 'schema_migrations'
+  ) <> 2
+  or not exists (
     select 1
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
@@ -605,6 +661,19 @@ begin
       and t.tgfoid = 'intelligence.reject_immutable_mutation()'::regprocedure
       and t.tgtype = 27
       and t.tgenabled = 'O'
+  )
+  or not exists (
+    select 1
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where not t.tgisinternal
+      and n.nspname = 'intelligence'
+      and c.relname = 'schema_migrations'
+      and t.tgname = 'intelligence_schema_migrations_truncate_guard'
+      and t.tgfoid = 'intelligence.reject_immutable_mutation()'::regprocedure
+      and t.tgtype = 34
+      and t.tgenabled = 'O'
   ) then
     raise exception 'Immutable trigger contract mismatch';
   end if;
@@ -612,7 +681,7 @@ end
 $$;
 
 -- Reject rewrite rules that could suppress or redirect the native ledger insert.
-do $
+do $$
 begin
   if exists (
     select 1
@@ -622,10 +691,10 @@ begin
     raise exception 'Unexpected rewrite rule on intelligence.schema_migrations';
   end if;
 end
-$;
+$$;
 
 -- Reject column-level ACL drift. The foundation contract has no column grants.
-do $
+do $$
 begin
   if exists (
     select 1
@@ -641,7 +710,7 @@ begin
     raise exception 'Unexpected column-level ACL on intelligence.schema_migrations';
   end if;
 end
-$;
+$$;
 
 -- Reject unknown table ACL holders before converging grants.
 do $$
@@ -785,6 +854,18 @@ declare
   existing_lineage text;
   inserted_version integer;
 begin
+  if exists (
+    select 1
+    from intelligence.schema_migrations
+    where version <> 1
+  ) then
+    raise exception 'Unexpected native Intelligence migration version';
+  end if;
+
+  if (select count(*) from intelligence.schema_migrations) > 1 then
+    raise exception 'Unexpected additional native Intelligence migration ledger rows';
+  end if;
+
   select contract_family, source_lineage
     into existing_contract, existing_lineage
   from intelligence.schema_migrations
@@ -804,7 +885,18 @@ begin
       raise exception 'Intelligence foundation migration identity insert was suppressed or altered';
     end if;
   end if;
+
+  if (select count(*) from intelligence.schema_migrations) <> 1
+     or not exists (
+       select 1
+       from intelligence.schema_migrations
+       where version = 1
+         and contract_family = 'DRANEKA_INTELLIGENCE_SUPABASE_FOUNDATION_001'
+         and source_lineage = 'TRANSITIONAL_JI_NEON_17_23'
+     ) then
+    raise exception 'Intelligence foundation migration identity was not recorded exactly';
+  end if;
 end
-$;
+$$;
 
 commit;
