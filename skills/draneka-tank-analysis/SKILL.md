@@ -2,10 +2,21 @@
 name: draneka-tank-analysis
 description: Analyze aquarium and tank questions from Journal Assistant using bounded Journal context, evidence-first reasoning, explicit uncertainty, ranked hypotheses, and the Draneka tank-analysis result contract. Use for water chemistry, livestock behavior or health, compatibility, feeding, cycling, plants, algae, maintenance, equipment, breeding, identification, and unexplained tank events.
 metadata:
+  version: "0.1.0"
   draneka-version: "0.1.0"
 ---
 
 # Draneka Tank Analysis
+## Invocation receipt
+
+When this canonical skill is actually resolved and invoked, emit the following before substantive skill output:
+
+```text
+SKILL = draneka-tank-analysis@<resolved-version>
+```
+
+Resolve `<resolved-version>` from this canonical skill's `metadata.version`. `metadata.draneka-version` remains the domain-result provenance version and must stay equal to `metadata.version` for this revision. Never invent or reuse a stale version.
+
 
 ## Purpose
 
