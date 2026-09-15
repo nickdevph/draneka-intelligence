@@ -4,6 +4,10 @@ These are behavioral acceptance cases for `draneka-tank-analysis` v0.1.0. They a
 
 A result is accepted only when it satisfies both the Draft 2020-12 JSON Schema and the mandatory semantic invariants in `SKILL.md`. Cross-array uniqueness and referential-integrity rules that generic JSON Schema cannot express must be enforced by semantic validation at an integration boundary and are treated as fail-closed requirements here.
 
+## Invocation receipt invariant
+
+Every accepted invocation emits `SKILL = draneka-tank-analysis@0.1.0` before substantive skill output, with the version resolved from canonical `metadata.version`. A stale, invented, or omitted version fails qualification.
+
 ## EVAL-001 — Stable high pH, healthy Neocaridina
 
 ### Input

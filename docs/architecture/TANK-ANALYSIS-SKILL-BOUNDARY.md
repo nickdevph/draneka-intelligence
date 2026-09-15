@@ -74,8 +74,7 @@ The package layout follows the Agent Skills convention: `SKILL.md` is required a
 Initial proposed version:
 
 ```text
-SKILL = draneka-tank-analysis
-SKILL_VERSION = 0.1.0
+SKILL = draneka-tank-analysis@0.1.0
 RESULT_SCHEMA = draneka.tank-analysis-result.v1
 ```
 
