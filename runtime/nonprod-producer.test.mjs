@@ -324,3 +324,18 @@ test('GitHub CREATE_ONLY write verifies private identity, SHA, blob, and exactly
   assert.equal(second.created, false);
   assert.equal(writes, 1);
 });
+
+test('producer refuses an existing result path with multiple history commits', async () => {
+  const calls = [];
+  const request = async ({ endpoint }) => {
+    calls.push(endpoint);
+    if (endpoint.startsWith('repos/nickdevph/aquaticfinder-intelligence-work/commits?path=')) {
+      return [{ sha: 'a'.repeat(40) }, { sha: 'b'.repeat(40) }];
+    }
+    throw new Error('A non-append-only result must be rejected before artifact read or write.');
+  };
+  const store = new GitHubArtifactStore({ request });
+  await assert.rejects(() => store.findExisting(workFixture()), /not append-only/i);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /\/commits\?path=/);
+});
