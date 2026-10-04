@@ -51,7 +51,7 @@ function workFixture(overrides = {}) {
     attemptState: 'READY',
     analysisType: 'TANK_ANALYSIS',
     adapterKey: 'draneka_intelligence_nonprod',
-    adapterVersion: 'codex-cli-tank-analysis-v2',
+    adapterVersion: 'codex-cli-tank-analysis-v3',
     resultSchemaVersion: 'af.journal.intelligence.work-result.v1',
     deadlineAt: new Date(Date.now() + 5 * 60_000).toISOString(),
     producerSourceCommit: sourceIdentity.commit,

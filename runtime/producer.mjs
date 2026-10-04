@@ -4,7 +4,7 @@ import { acquireAttemptLock } from './attempt-lock.mjs';
 import { PRODUCER_IDENTITY, ARTIFACT_REPOSITORY, ARTIFACT_SCHEMA, ARTIFACT_NAMESPACE, journalArtifactPath } from './github-artifact-store.mjs';
 
 export const PRODUCER_ADAPTER_KEY = 'draneka_intelligence_nonprod';
-export const PRODUCER_ADAPTER_VERSION = 'codex-cli-tank-analysis-v2';
+export const PRODUCER_ADAPTER_VERSION = 'codex-cli-tank-analysis-v3';
 export const MAX_BOUNDED_CONTEXT_BYTES = 60_000;
 
 const IDENTITY_KEY = /^(?:accountId|ownerUserId|userId|tankId|analysisRequestId|executionJobId|attemptId|account_id|owner_user_id|user_id|tank_id|analysis_request_id|execution_job_id|attempt_id)$/i;
