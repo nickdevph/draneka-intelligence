@@ -9,6 +9,7 @@ import { createExecutionProvenance, executeEligibleWork, redactBoundedContextFor
 import { GitHubArtifactStore, PRODUCER_IDENTITY, gitBlobSha } from './github-artifact-store.mjs';
 import { acquireAttemptLock } from './attempt-lock.mjs';
 import { buildStructuredOutputSchema } from './codex-cli-executor.mjs';
+import { expireProducerScanDeferrals, producerScanExclusions, recordProducerScanOutcome } from './scan-policy.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const analysisRequestId = '10000000-0000-4000-8000-000000000001';
@@ -262,6 +263,49 @@ test('two duplicate scans for one attempt cannot both acquire the local executio
   assert.ok(recovered);
   await recovered.release();
   await rm(root, { recursive: true, force: true });
+});
+
+test('a duplicate scan is deferred and rediscovered after the lock owner exits', async () => {
+  const deferredUntil = new Map();
+  const excluded = new Set();
+  let lockOwnedByOther = true;
+  let executorCalls = 0;
+  const work = workFixture();
+  const store = artifactStoreFake();
+  const execute = () => executeEligibleWork({
+    work,
+    journal: journalFake({ work }),
+    artifactStore: store,
+    executor: async () => {
+      executorCalls += 1;
+      return {
+        result: await resultFixture(),
+        executor: { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: 'ephemeral-thread' },
+      };
+    },
+    sourceIdentity,
+    skillResolver: resolvePinnedTankAnalysisSkill,
+    lockFactory: async () => lockOwnedByOther ? null : ({ release: async () => {} }),
+  });
+
+  const contended = await execute();
+  assert.equal(contended.status, 'DUPLICATE_SCAN_SKIPPED');
+  assert.equal(recordProducerScanOutcome({
+    attemptId, status: contended.status, now: 100_000, deferredUntil, excluded,
+  }), 'DEFERRED');
+  assert.deepEqual(producerScanExclusions(excluded, deferredUntil), [attemptId]);
+  assert.equal(excluded.has(attemptId), false);
+
+  lockOwnedByOther = false;
+  expireProducerScanDeferrals(deferredUntil, 104_999);
+  assert.deepEqual(producerScanExclusions(excluded, deferredUntil), [attemptId]);
+  expireProducerScanDeferrals(deferredUntil, 105_000);
+  assert.deepEqual(producerScanExclusions(excluded, deferredUntil), []);
+
+  const recovered = await execute();
+  assert.equal(recovered.status, 'ARTIFACT_CREATED');
+  assert.equal(executorCalls, 1);
+  assert.equal(store.state.writes, 1);
 });
 
 test('producer artifact path is bound to request and attempt ids', () => {

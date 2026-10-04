@@ -4,6 +4,7 @@ import { runCodexCliTankAnalysis } from './codex-cli-executor.mjs';
 import { JournalProducerIpcClient } from './journal-ipc-client.mjs';
 import { GitHubArtifactStore } from './github-artifact-store.mjs';
 import { executeEligibleWork } from './producer.mjs';
+import { expireProducerScanDeferrals, producerScanExclusions, recordProducerScanOutcome } from './scan-policy.mjs';
 
 const socketPath = process.env.JOURNAL_JI_PRODUCER_SOCKET_PATH;
 if (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production' || process.env.JOURNAL_JI_NONPROD_PRODUCER_ENABLED !== 'true') {
@@ -26,8 +27,8 @@ process.once('SIGTERM', stop);
 
 while (!stopping) {
   const now = Date.now();
-  for (const [attemptId, until] of deferredUntil) if (until <= now) deferredUntil.delete(attemptId);
-  const excludeAttemptIds = [...new Set([...excluded, ...deferredUntil.keys()])].slice(-100);
+  expireProducerScanDeferrals(deferredUntil, now);
+  const excludeAttemptIds = producerScanExclusions(excluded, deferredUntil);
   let work;
   try {
     work = await journal.scan(excludeAttemptIds);
@@ -48,12 +49,7 @@ while (!stopping) {
       sourceIdentity,
       skillResolver: async () => skill,
     });
-    if (['ARTIFACT_CREATED', 'EXISTING_ARTIFACT_VERIFIED', 'DUPLICATE_SCAN_SKIPPED', 'STALE_BEFORE_EXECUTION', 'STALE_AFTER_EXECUTION', 'ADMISSION_SOURCE_MISMATCH', 'PINNED_SKILL_MISMATCH'].includes(result.status)) {
-      excluded.add(work.attemptId);
-    } else {
-      const nextDelay = Math.min(60_000, Math.max(2000, (deferredUntil.get(work.attemptId) || now) - now) * 2);
-      deferredUntil.set(work.attemptId, now + nextDelay);
-    }
+    recordProducerScanOutcome({ attemptId: work.attemptId, status: result.status, now, deferredUntil, excluded });
     process.stdout.write(JSON.stringify({ event: 'producer_attempt_complete', attemptId: work.attemptId, status: result.status }) + '\n');
   } catch {
     deferredUntil.set(work.attemptId, now + 5000);
