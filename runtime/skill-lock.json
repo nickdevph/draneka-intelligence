@@ -1,0 +1,14 @@
+{
+  "repository": "nickdevph/draneka-intelligence",
+  "sourceCommit": "65cac03b33bf9150504102a8662e714978ecc28d",
+  "name": "draneka-tank-analysis",
+  "version": "0.1.0",
+  "schemaVersion": "draneka.tank-analysis-result.v1",
+  "files": {
+    "skills/draneka-tank-analysis/SKILL.md": "498c736565574d93973e551f602d18194f80fb9ce4cef229f4ca22a2da637948",
+    "skills/draneka-tank-analysis/schemas/tank-analysis-result.schema.json": "a04e31c559a8bc43eb3c160e752893d9763e31bce10e5618f56e90c660447f70",
+    "skills/draneka-tank-analysis/references/evidence-policy.md": "96cd59f98db1bd090ee3fc40e09e98dcbdf204b7ff7ab0a821ed842d30bcba74",
+    "skills/draneka-tank-analysis/references/safety-policy.md": "2211651d531dc12581ed87264d2d9a609ae6c91e80b3fc65aade62f4cc017310",
+    "skills/draneka-tank-analysis/references/analysis-taxonomy.md": "5e9a697ab4fcc889e872c9823f0ca20a5ad72129888c4d391301255b1e652790"
+  }
+}
