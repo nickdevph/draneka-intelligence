@@ -62,6 +62,11 @@ BEGIN
 END
 $$;
 
+-- Keep the owner-erasure control plane in an Intelligence-owned private schema.
+-- This schema is part of migration 10's clean-install contract, not an external
+-- provisioning prerequisite.
+CREATE SCHEMA IF NOT EXISTS intelligence_internal AUTHORIZATION intelligence_migrator;
+
 DO $$
 DECLARE
   current_definition text;
