@@ -9,6 +9,20 @@ export const MAX_BOUNDED_CONTEXT_BYTES = 60_000;
 
 const IDENTITY_KEY = /^(?:accountId|ownerUserId|userId|tankId|analysisRequestId|executionJobId|attemptId|account_id|owner_user_id|user_id|tank_id|analysis_request_id|execution_job_id|attempt_id)$/i;
 const SECRET_KEY = /password|secret|credential|token|authorization/i;
+const EXECUTOR_PROVENANCE_KEYS = ['executionId', 'identity', 'model', 'version'];
+
+function validateExecutorProvenance(executor) {
+  if (!isPlainObject(executor) ||
+      JSON.stringify(Object.keys(executor).sort()) !== JSON.stringify(EXECUTOR_PROVENANCE_KEYS) ||
+      executor.identity !== 'codex-cli' ||
+      typeof executor.version !== 'string' || executor.version.length > 128 ||
+      !/^codex-cli \d+\.\d+\.\d+$/.test(executor.version) ||
+      !(executor.model === null || (typeof executor.model === 'string' && executor.model.length > 0 && executor.model.length <= 128 && !/[\u0000-\u001f\u007f]/.test(executor.model))) ||
+      typeof executor.executionId !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(executor.executionId)) {
+    throw new Error('Codex CLI executor provenance is missing or invalid.');
+  }
+  return executor;
+}
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -91,6 +105,7 @@ function skillProvenance(skill) {
 }
 
 export function createExecutionProvenance({ sourceIdentity, executor, work, skill = pinnedSkillLock }) {
+  validateExecutorProvenance(executor);
   return {
     producerIdentity: PRODUCER_IDENTITY,
     producerRuntime: 'draneka-intelligence-nonprod-local',

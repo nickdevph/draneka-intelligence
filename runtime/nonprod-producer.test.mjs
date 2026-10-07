@@ -237,6 +237,29 @@ test('schema-invalid output and late stale output never create an accepted artif
   assert.equal(staleStore.state.writes, 0);
 });
 
+test('missing or malformed executor provenance is rejected before artifact persistence', async () => {
+  const work = workFixture();
+  const invalidExecutors = [
+    { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: null },
+    { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: 'thread id with spaces' },
+    { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: 'ephemeral-thread', claimToken: 'forbidden' },
+  ];
+
+  for (const executorProvenance of invalidExecutors) {
+    const store = artifactStoreFake();
+    await assert.rejects(() => executeEligibleWork({
+      work,
+      journal: journalFake({ work }),
+      artifactStore: store,
+      executor: async () => ({ result: await resultFixture(), executor: executorProvenance }),
+      sourceIdentity,
+      skillResolver: resolvePinnedTankAnalysisSkill,
+      lockFactory: async () => ({ release: async () => {} }),
+    }), /executor provenance is missing or invalid/i);
+    assert.equal(store.state.writes, 0);
+  }
+});
+
 test('an immutable artifact on the attempt path is verified without a second executor call', async () => {
   const result = await resultFixture();
   const store = artifactStoreFake();
