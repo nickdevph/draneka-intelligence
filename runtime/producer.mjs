@@ -161,7 +161,10 @@ export async function executeEligibleWork({
     const before = await journal.current(work.attemptId, work.claimToken);
     if (!sameExecution(work, before)) return { status: 'STALE_BEFORE_EXECUTION' };
     const prior = await artifactStore.findExisting(work);
-    if (prior) return { status: 'EXISTING_ARTIFACT_VERIFIED', artifact: prior };
+    if (prior) {
+      await reconcileClaimedCodexArtifact(adapter, journal, work);
+      return { status: 'EXISTING_ARTIFACT_VERIFIED', artifact: prior };
+    }
 
     const skill = await skillResolver();
     if (skill.name !== pinnedSkillLock.name || skill.version !== pinnedSkillLock.version ||
@@ -185,9 +188,22 @@ export async function executeEligibleWork({
       : execution.executor;
     const provenance = createExecutionProvenance({ sourceIdentity, executor: provenanceExecutor, work, skill });
     const artifact = await artifactStore.createOnly({ work, result: execution.result, executionProvenance: provenance, createdAt: now().toISOString() });
+    await reconcileClaimedCodexArtifact(adapter, journal, work);
     return { status: artifact.created ? 'ARTIFACT_CREATED' : 'EXISTING_ARTIFACT_VERIFIED', artifact };
   } finally {
     await lock.release();
+  }
+}
+
+async function reconcileClaimedCodexArtifact(adapter, journal, work) {
+  if (!adapter.authoritativeExecutionId) return;
+  if (!journal || typeof journal.reconcile !== 'function') {
+    throw new Error('The claimed Codex CLI artifact requires Journal-owned reconciliation.');
+  }
+  const acceptance = await journal.reconcile(work.attemptId, work.claimToken);
+  if (!acceptance || acceptance.accepted !== true || acceptance.attemptId !== work.attemptId ||
+      acceptance.analysisRequestId !== work.analysisRequestId) {
+    throw new Error('Journal did not accept the exact current Codex CLI artifact.');
   }
 }
 

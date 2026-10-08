@@ -4,7 +4,7 @@ import { runCodexCliTankAnalysis } from './codex-cli-executor.mjs';
 import { JournalProducerIpcClient } from './journal-ipc-client.mjs';
 import { JournalCodexClaimClient } from './journal-codex-claim-client.mjs';
 import { GitHubArtifactStore } from './github-artifact-store.mjs';
-import { runProducerCycle } from './producer-cycle.mjs';
+import { isSuccessfulOneShotStatus, runProducerCycle } from './producer-cycle.mjs';
 
 const socketPath = process.env.JOURNAL_JI_PRODUCER_SOCKET_PATH;
 const nonprodMode = process.env.JOURNAL_JI_NONPROD_PRODUCER_ENABLED === 'true';
@@ -67,6 +67,11 @@ while (!stopping) {
       break;
     }
     continue;
+  }
+  if (once && !isSuccessfulOneShotStatus(outcome.status)) {
+    process.stdout.write(JSON.stringify({ event: 'producer_attempt_failed', attemptId: outcome.attemptId, code: outcome.status }) + '\n');
+    process.exitCode = 1;
+    break;
   }
   process.stdout.write(JSON.stringify({ event: 'producer_attempt_complete', attemptId: outcome.attemptId, status: outcome.status }) + '\n');
   if (once) break;

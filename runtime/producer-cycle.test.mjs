@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runProducerCycle } from './producer-cycle.mjs';
+import { isSuccessfulOneShotStatus, runProducerCycle } from './producer-cycle.mjs';
+
+test('one-shot scheduler success is limited to no-work or a verified immutable artifact', () => {
+  assert.equal(isSuccessfulOneShotStatus('NO_ELIGIBLE_WORK'), true);
+  assert.equal(isSuccessfulOneShotStatus('ARTIFACT_CREATED'), true);
+  assert.equal(isSuccessfulOneShotStatus('EXISTING_ARTIFACT_VERIFIED'), true);
+  for (const status of ['INVALID_STRUCTURED_RESULT', 'ADMISSION_SOURCE_MISMATCH', 'PINNED_SKILL_MISMATCH', 'STALE_AFTER_EXECUTION', 'DUPLICATE_SCAN_SKIPPED', 'PRODUCER_EXECUTION_FAILED']) {
+    assert.equal(isSuccessfulOneShotStatus(status), false, `${status} must report a failed one-shot invocation`);
+  }
+});
 
 function dependencies({ work = null, scanError = null, executeError = null } = {}) {
   let scanCount = 0;

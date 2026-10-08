@@ -228,9 +228,16 @@ test('production Codex adapter requires the Journal claim and uses its exact exe
   });
   const store = artifactStoreFake();
   let executorSawWork;
+  let reconciledClaim;
   const execution = await executeEligibleWork({
     work: productionWork,
-    journal: { current: async () => productionWork },
+    journal: {
+      current: async () => productionWork,
+      reconcile: async (attemptId, claimToken) => {
+        reconciledClaim = { attemptId, claimToken };
+        return { accepted: true, analysisRequestId: productionWork.analysisRequestId, attemptId, resultId: 'qualification-result-id' };
+      },
+    },
     artifactStore: {
       ...store,
       async createOnly(args) {
@@ -248,6 +255,7 @@ test('production Codex adapter requires the Journal claim and uses its exact exe
     lockFactory: async () => ({ release: async () => {} }),
   });
   assert.equal(execution.status, 'ARTIFACT_CREATED');
+  assert.deepEqual(reconciledClaim, { attemptId: productionWork.attemptId, claimToken: productionWork.claimToken });
   assert.equal(store.state.writes, 1);
   assert.equal(store.state.provenance.executor.executionId, serverExecutionId);
   assert.equal(executorSawWork.claimToken, undefined);

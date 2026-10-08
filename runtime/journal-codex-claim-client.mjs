@@ -1,6 +1,7 @@
 const PROD_ORIGIN = 'https://aquaticfinder.com';
 const CLAIM_PATH = '/api/journal/internal/ji/codex-cli/work/claim';
 const CURRENT_PATH = '/api/journal/internal/ji/codex-cli/work/current';
+const RECONCILE_PATH = '/api/journal/internal/ji/codex-cli/work/reconcile';
 const MAX_RESPONSE_BYTES = 150_000;
 
 function resolveOrigin(env) {
@@ -66,6 +67,13 @@ export class JournalCodexClaimClient {
     return response.data.work;
   }
 
+  async scan(excludeAttemptIds = []) {
+    if (!Array.isArray(excludeAttemptIds) || excludeAttemptIds.length !== 0) {
+      throw new Error('Authoritative Codex CLI claims do not accept selectors or scan exclusions.');
+    }
+    return this.claim();
+  }
+
   async current(attemptId, claimToken) {
     const response = await this.request(CURRENT_PATH, { attemptId, claimToken });
     if (response.status === 204 || response.status === 404 || response.status === 409) return null;
@@ -74,6 +82,15 @@ export class JournalCodexClaimClient {
     }
     return response.data.work;
   }
+
+  async reconcile(attemptId, claimToken) {
+    const response = await this.request(RECONCILE_PATH, { attemptId, claimToken });
+    if (response.status !== 200 || response.data?.accepted !== true ||
+        response.data.attemptId !== attemptId || typeof response.data.resultId !== 'string') {
+      throw new Error(`Journal Codex artifact reconciliation failed (${response.status}).`);
+    }
+    return response.data;
+  }
 }
 
-export const journalCodexClaimPaths = Object.freeze({ claim: CLAIM_PATH, current: CURRENT_PATH });
+export const journalCodexClaimPaths = Object.freeze({ claim: CLAIM_PATH, current: CURRENT_PATH, reconcile: RECONCILE_PATH });

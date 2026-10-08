@@ -11,7 +11,7 @@ export const NONPROD_CODEX_ADAPTER = Object.freeze({
 
 export const PRODUCTION_CODEX_CLI_ADAPTER = Object.freeze({
   key: 'codex_cli',
-  version: 'codex-cli-tank-analysis-v1',
+  version: 'codex-cli-tank-analysis-v2',
   producerIdentity: 'codex_cli',
   producerRuntime: 'draneka-intelligence-local-codex-cli',
   claimMode: 'claim',

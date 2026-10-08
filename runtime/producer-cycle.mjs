@@ -1,6 +1,12 @@
 import { executeEligibleWork } from './producer.mjs';
 import { expireProducerScanDeferrals, producerScanExclusions, recordProducerScanOutcome } from './scan-policy.mjs';
 
+const ONE_SHOT_SUCCESS_STATUSES = new Set(['NO_ELIGIBLE_WORK', 'ARTIFACT_CREATED', 'EXISTING_ARTIFACT_VERIFIED']);
+
+export function isSuccessfulOneShotStatus(status) {
+  return ONE_SHOT_SUCCESS_STATUSES.has(status);
+}
+
 export async function runProducerCycle({
   journal,
   artifactStore,
