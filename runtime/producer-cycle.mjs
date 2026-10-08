@@ -16,7 +16,9 @@ export async function runProducerCycle({
   const excludeAttemptIds = producerScanExclusions(excluded, deferredUntil);
   let work;
   try {
-    work = await journal.scan(excludeAttemptIds);
+    work = typeof journal.claim === 'function'
+      ? await journal.claim()
+      : await journal.scan(excludeAttemptIds);
   } catch {
     return { status: 'SCAN_RETRYABLE_FAILURE' };
   }

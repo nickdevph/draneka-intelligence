@@ -49,3 +49,25 @@ test('one producer cycle reports retryable scan and execution failures without l
   assert.deepEqual(execute.counts(), { scanCount: 1, executeCount: 1 });
   assert.equal(execute.deferredUntil.get('attempt-two'), 6000);
 });
+
+test('scheduled Codex cycle performs one authoritative claim and does not fall back to scan', async () => {
+  let claimCount = 0;
+  let scanCount = 0;
+  const journal = {
+    async claim() { claimCount += 1; return null; },
+    async scan() { scanCount += 1; throw new Error('global scan must not be used'); },
+  };
+  const result = await runProducerCycle({
+    journal,
+    artifactStore: {},
+    executor: async () => { throw new Error('no work should reach executor'); },
+    sourceIdentity: {},
+    skillResolver: async () => ({}),
+    deferredUntil: new Map(),
+    excluded: new Set(),
+    now: 1000,
+  });
+  assert.deepEqual(result, { status: 'NO_ELIGIBLE_WORK' });
+  assert.equal(claimCount, 1);
+  assert.equal(scanCount, 0);
+});

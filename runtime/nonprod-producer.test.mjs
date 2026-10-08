@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { resolvePinnedTankAnalysisSkill } from './pinned-skill.mjs';
 import { validateTankAnalysisResult } from './result-validator.mjs';
 import { createExecutionProvenance, executeEligibleWork, redactBoundedContextForTest, validateWorkIdentity } from './producer.mjs';
-import { GitHubArtifactStore, PRODUCER_IDENTITY, gitBlobSha } from './github-artifact-store.mjs';
+import { GitHubArtifactStore, PRODUCER_IDENTITY, assertArtifactBinding, gitBlobSha } from './github-artifact-store.mjs';
 import { acquireAttemptLock } from './attempt-lock.mjs';
 import { buildStructuredOutputSchema } from './codex-cli-executor.mjs';
 import { expireProducerScanDeferrals, producerScanExclusions, recordProducerScanOutcome } from './scan-policy.mjs';
+import { PRODUCTION_CODEX_CLI_ADAPTER } from './adapter-contract.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const analysisRequestId = '10000000-0000-4000-8000-000000000001';
@@ -213,6 +214,64 @@ test('failed Codex execution creates no artifact and the same READY attempt is r
   assert.equal(runs, 2);
 });
 
+test('production Codex adapter requires the Journal claim and uses its exact execution identity', async () => {
+  const serverExecutionId = 'e'.repeat(64);
+  const productionWork = workFixture({
+    adapterKey: PRODUCTION_CODEX_CLI_ADAPTER.key,
+    adapterVersion: PRODUCTION_CODEX_CLI_ADAPTER.version,
+    attemptState: 'CLAIMED',
+    jobState: 'CLAIMED',
+    claimedBy: 'codex-cli',
+    claimToken: '70000000-0000-4000-8000-000000000007',
+    claimExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    executorExecutionId: serverExecutionId,
+  });
+  const store = artifactStoreFake();
+  let executorSawWork;
+  const execution = await executeEligibleWork({
+    work: productionWork,
+    journal: { current: async () => productionWork },
+    artifactStore: {
+      ...store,
+      async createOnly(args) {
+        store.state.writes += 1;
+        store.state.provenance = args.executionProvenance;
+        return { created: true, result: args.result };
+      },
+    },
+    executor: async ({ work }) => {
+      executorSawWork = work;
+      return { result: await resultFixture(), executor: { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: 'local-thread-is-not-authoritative' } };
+    },
+    sourceIdentity,
+    skillResolver: resolvePinnedTankAnalysisSkill,
+    lockFactory: async () => ({ release: async () => {} }),
+  });
+  assert.equal(execution.status, 'ARTIFACT_CREATED');
+  assert.equal(store.state.writes, 1);
+  assert.equal(store.state.provenance.executor.executionId, serverExecutionId);
+  assert.equal(executorSawWork.claimToken, undefined);
+  assert.equal(executorSawWork.executorExecutionId, undefined);
+  assert.equal(executorSawWork.accountId, undefined);
+  assert.equal(executorSawWork.tankId, undefined);
+});
+
+test('production Codex adapter rejects a missing or invalid Journal claim', () => {
+  const base = workFixture({
+    adapterKey: PRODUCTION_CODEX_CLI_ADAPTER.key,
+    adapterVersion: PRODUCTION_CODEX_CLI_ADAPTER.version,
+    attemptState: 'CLAIMED',
+    jobState: 'CLAIMED',
+    claimedBy: 'codex-cli',
+    claimToken: '70000000-0000-4000-8000-000000000007',
+    claimExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    executorExecutionId: 'e'.repeat(64),
+  });
+  assert.equal(validateWorkIdentity(base, PRODUCTION_CODEX_CLI_ADAPTER).attemptId, attemptId);
+  assert.throws(() => validateWorkIdentity({ ...base, executorExecutionId: undefined }, PRODUCTION_CODEX_CLI_ADAPTER), /Journal-issued claim/);
+  assert.throws(() => validateWorkIdentity({ ...base, claimedBy: 'chatgpt-work' }, PRODUCTION_CODEX_CLI_ADAPTER), /Journal-issued claim/);
+});
+
 test('schema-invalid output and late stale output never create an accepted artifact', async () => {
   const invalidStore = artifactStoreFake();
   const invalid = await resultFixture();
@@ -335,6 +394,38 @@ test('producer artifact path is bound to request and attempt ids', () => {
   assert.equal(PRODUCER_IDENTITY, 'draneka_intelligence_nonprod');
   assert.equal(`journal-intelligence/results/${analysisRequestId}/${attemptId}.json`, `journal-intelligence/results/${analysisRequestId}/${attemptId}.json`);
   assert.equal(gitBlobSha(Buffer.from('hello')), 'b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0');
+});
+
+test('production Codex artifact uses its truthful identity and exact server-issued execution id', async () => {
+  const work = workFixture({
+    adapterKey: PRODUCTION_CODEX_CLI_ADAPTER.key,
+    adapterVersion: PRODUCTION_CODEX_CLI_ADAPTER.version,
+    attemptState: 'CLAIMED', jobState: 'CLAIMED', claimedBy: 'codex-cli',
+    claimToken: '70000000-0000-4000-8000-000000000007',
+    claimExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    executorExecutionId: 'e'.repeat(64),
+  });
+  const result = await resultFixture();
+  const executionProvenance = createExecutionProvenance({
+    sourceIdentity,
+    work,
+    executor: { identity: 'codex-cli', version: 'codex-cli 0.155.0', model: 'configured-default', executionId: work.executorExecutionId },
+  });
+  const artifact = {
+    namespace: 'journal-intelligence', schemaVersion: 'af.intelligence-work-result.v1', producer: 'codex_cli',
+    disposition: 'PASS', createdAt: new Date().toISOString(), taskId: work.analysisRequestId, runId: work.attemptId,
+    source: {
+      system: 'aquaticfinder-journal-ji', executionJobId: work.executionJobId, analysisRequestId: work.analysisRequestId,
+      attemptId: work.attemptId, requestRevision: work.requestRevision, processingCycle: work.processingCycle,
+      contextFingerprint: work.contextFingerprint,
+    }, executionProvenance, metadata: { result },
+  };
+  assert.equal(assertArtifactBinding(artifact, work), result);
+  assert.equal(JSON.stringify(artifact).includes(work.claimToken), false);
+  assert.throws(() => assertArtifactBinding({
+    ...artifact,
+    executionProvenance: { ...executionProvenance, executor: { ...executionProvenance.executor, executionId: 'local-cli-thread-id' } },
+  }, work), /provenance/);
 });
 
 test('GitHub CREATE_ONLY write verifies private identity, SHA, blob, and exactly one path-history commit', async () => {

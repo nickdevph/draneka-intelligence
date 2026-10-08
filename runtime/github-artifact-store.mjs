@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { validateTankAnalysisResult } from './result-validator.mjs';
 import { pinnedSkillLock } from './pinned-skill.mjs';
+import { adapterContractForWork } from './adapter-contract.mjs';
 
 export const ARTIFACT_REPOSITORY = 'nickdevph/aquaticfinder-intelligence-work';
 export const ARTIFACT_BRANCH = 'main';
@@ -72,9 +73,10 @@ function expectedSource(work) {
 }
 
 function assertArtifactBinding(artifact, work, { expectedResult = null } = {}) {
+  const adapter = adapterContractForWork(work);
   if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact) ||
       artifact.namespace !== ARTIFACT_NAMESPACE || artifact.schemaVersion !== ARTIFACT_SCHEMA ||
-      artifact.producer !== PRODUCER_IDENTITY || !['PASS', 'COMPLETED'].includes(artifact.disposition) ||
+      artifact.producer !== adapter.producerIdentity || !['PASS', 'COMPLETED'].includes(artifact.disposition) ||
       artifact.taskId !== work.analysisRequestId || artifact.runId !== work.attemptId) {
     throw new Error('Existing GitHub artifact does not match the admitted producer identity.');
   }
@@ -97,8 +99,8 @@ function assertArtifactBinding(artifact, work, { expectedResult = null } = {}) {
     adapterKey: work.adapterKey,
     adapterVersion: work.adapterVersion,
   };
-  if (provenance?.producerIdentity !== PRODUCER_IDENTITY ||
-      provenance?.producerRuntime !== 'draneka-intelligence-nonprod-local' ||
+  if (provenance?.producerIdentity !== adapter.producerIdentity ||
+      provenance?.producerRuntime !== adapter.producerRuntime ||
       provenance?.artifactRepository !== ARTIFACT_REPOSITORY ||
       provenance?.artifactNamespace !== ARTIFACT_NAMESPACE ||
       provenance?.artifactSchema !== ARTIFACT_SCHEMA ||
@@ -108,6 +110,7 @@ function assertArtifactBinding(artifact, work, { expectedResult = null } = {}) {
       provenance?.executor?.identity !== 'codex-cli' ||
       typeof provenance?.executor?.version !== 'string' || provenance.executor.version.length > 128 ||
       typeof provenance?.executor?.executionId !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(provenance.executor.executionId) ||
+      (adapter.authoritativeExecutionId && provenance.executor.executionId !== work.executorExecutionId) ||
       provenance?.skill?.name !== pinnedSkillLock.name ||
       provenance?.skill?.version !== pinnedSkillLock.version ||
       provenance?.skill?.sourceRepository !== pinnedSkillLock.repository ||
@@ -186,13 +189,14 @@ export class GitHubArtifactStore {
   }
 
   async createOnly({ work, result, executionProvenance, createdAt = new Date().toISOString() }) {
+    const adapter = adapterContractForWork(work);
     const path = journalArtifactPath(work);
     const prior = await this.findExisting(work);
     if (prior) return prior;
     const artifact = {
       namespace: ARTIFACT_NAMESPACE,
       schemaVersion: ARTIFACT_SCHEMA,
-      producer: PRODUCER_IDENTITY,
+      producer: adapter.producerIdentity,
       disposition: 'PASS',
       createdAt,
       taskId: work.analysisRequestId,

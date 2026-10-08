@@ -1,10 +1,11 @@
 import { validateTankAnalysisResult } from './result-validator.mjs';
 import { pinnedSkillLock } from './pinned-skill.mjs';
 import { acquireAttemptLock } from './attempt-lock.mjs';
-import { PRODUCER_IDENTITY, ARTIFACT_REPOSITORY, ARTIFACT_SCHEMA, ARTIFACT_NAMESPACE, journalArtifactPath } from './github-artifact-store.mjs';
+import { ARTIFACT_REPOSITORY, ARTIFACT_SCHEMA, ARTIFACT_NAMESPACE, journalArtifactPath } from './github-artifact-store.mjs';
+import { adapterContractForWork, NONPROD_CODEX_ADAPTER } from './adapter-contract.mjs';
 
-export const PRODUCER_ADAPTER_KEY = 'draneka_intelligence_nonprod';
-export const PRODUCER_ADAPTER_VERSION = 'codex-cli-tank-analysis-v3';
+export const PRODUCER_ADAPTER_KEY = NONPROD_CODEX_ADAPTER.key;
+export const PRODUCER_ADAPTER_VERSION = NONPROD_CODEX_ADAPTER.version;
 export const MAX_BOUNDED_CONTEXT_BYTES = 60_000;
 
 const IDENTITY_KEY = /^(?:accountId|ownerUserId|userId|tankId|analysisRequestId|executionJobId|attemptId|account_id|owner_user_id|user_id|tank_id|analysis_request_id|execution_job_id|attempt_id)$/i;
@@ -47,7 +48,7 @@ function redactBoundedContext(value, depth = 0) {
   return Object.fromEntries(entries.map(([key, child]) => [key, redactBoundedContext(child, depth + 1)]));
 }
 
-export function validateWorkIdentity(work, expectedAdapter = { key: PRODUCER_ADAPTER_KEY, version: PRODUCER_ADAPTER_VERSION }) {
+export function validateWorkIdentity(work, expectedAdapter = NONPROD_CODEX_ADAPTER) {
   if (!isPlainObject(work)) throw new Error('Eligible Journal work is malformed.');
   for (const field of ['analysisRequestId', 'executionJobId', 'attemptId', 'accountId', 'tankId', 'contextFingerprint', 'providerAdmissionId']) {
     if (typeof work[field] !== 'string' || !work[field].trim()) throw new Error(`Eligible Journal work is missing ${field}.`);
@@ -58,11 +59,17 @@ export function validateWorkIdentity(work, expectedAdapter = { key: PRODUCER_ADA
   if (!/^[0-9a-f]{64}$/i.test(work.contextFingerprint) ||
       !Number.isSafeInteger(work.requestRevision) || work.requestRevision < 1 ||
       !Number.isSafeInteger(work.processingCycle) || work.processingCycle < 1 ||
-      work.attemptState !== 'READY' || work.jobState !== 'DISPATCH_AUTHORIZED' || work.requestState !== 'PROCESSING' ||
+      work.attemptState !== expectedAdapter.attemptState || work.jobState !== expectedAdapter.jobState || work.requestState !== 'PROCESSING' ||
       work.analysisType !== 'TANK_ANALYSIS' || work.adapterKey !== expectedAdapter.key ||
       work.adapterVersion !== expectedAdapter.version || work.resultSchemaVersion !== 'af.journal.intelligence.work-result.v1' ||
       !Number.isFinite(Date.parse(work.deadlineAt || '')) || Date.parse(work.deadlineAt) <= Date.now()) {
     throw new Error('Eligible Journal work is stale or outside the admitted producer contract.');
+  }
+  if (expectedAdapter.authoritativeExecutionId &&
+      (work.claimedBy !== 'codex-cli' || typeof work.claimToken !== 'string' || !/^[0-9a-f-]{36}$/i.test(work.claimToken) ||
+       typeof work.executorExecutionId !== 'string' || !/^[0-9a-f]{64}$/i.test(work.executorExecutionId) ||
+       !Number.isFinite(Date.parse(work.claimExpiresAt || '')) || Date.parse(work.claimExpiresAt) <= Date.now())) {
+    throw new Error('Codex CLI work lacks an active Journal-issued claim and executor identity.');
   }
   if (typeof work.question !== 'string' || !work.question.trim() || work.question.length > 2048 ||
       !isPlainObject(work.boundedContext) || !Array.isArray(work.evidenceManifest) ||
@@ -86,8 +93,11 @@ function sameExecution(work, current) {
     'adapterKey', 'adapterVersion', 'resultSchemaVersion', 'deadlineAt',
     'producerSourceCommit', 'producerSourceTree',
   ];
+  const adapter = adapterContractForWork(work);
   return fields.every((field) => String(work[field]) === String(current[field])) &&
-    current.attemptState === 'READY' && current.jobState === 'DISPATCH_AUTHORIZED' && current.requestState === 'PROCESSING';
+    current.attemptState === adapter.attemptState && current.jobState === adapter.jobState && current.requestState === 'PROCESSING' &&
+    (!adapter.authoritativeExecutionId || (current.claimedBy === work.claimedBy && current.executorExecutionId === work.executorExecutionId &&
+      String(current.claimExpiresAt) === String(work.claimExpiresAt) && Date.parse(current.claimExpiresAt || '') > Date.now()));
 }
 
 function skillProvenance(skill) {
@@ -106,9 +116,10 @@ function skillProvenance(skill) {
 
 export function createExecutionProvenance({ sourceIdentity, executor, work, skill = pinnedSkillLock }) {
   validateExecutorProvenance(executor);
+  const adapter = adapterContractForWork(work);
   return {
-    producerIdentity: PRODUCER_IDENTITY,
-    producerRuntime: 'draneka-intelligence-nonprod-local',
+    producerIdentity: adapter.producerIdentity,
+    producerRuntime: adapter.producerRuntime,
     producerSource: { ...sourceIdentity },
     executor: { ...executor },
     skill: skillProvenance(skill),
@@ -139,14 +150,15 @@ export async function executeEligibleWork({
   lockFactory = acquireAttemptLock,
   now = () => new Date(),
 }) {
-  const work = validateWorkIdentity(rawWork);
+  const adapter = adapterContractForWork(rawWork);
+  const work = validateWorkIdentity(rawWork, adapter);
   if (work.producerSourceCommit !== sourceIdentity.commit || work.producerSourceTree !== sourceIdentity.tree) {
     return { status: 'ADMISSION_SOURCE_MISMATCH' };
   }
   const lock = await lockFactory(work.attemptId);
   if (!lock) return { status: 'DUPLICATE_SCAN_SKIPPED' };
   try {
-    const before = await journal.current(work.attemptId);
+    const before = await journal.current(work.attemptId, work.claimToken);
     if (!sameExecution(work, before)) return { status: 'STALE_BEFORE_EXECUTION' };
     const prior = await artifactStore.findExisting(work);
     if (prior) return { status: 'EXISTING_ARTIFACT_VERIFIED', artifact: prior };
@@ -156,7 +168,9 @@ export async function executeEligibleWork({
         skill.sourceCommit !== pinnedSkillLock.sourceCommit || skill.schemaVersion !== pinnedSkillLock.schemaVersion) {
       return { status: 'PINNED_SKILL_MISMATCH' };
     }
-    const execution = await executor({ skill, work, onExecutorPid: lock.updateExecutorPid || (async () => {}) });
+    const modelWork = { ...work };
+    for (const key of ['claimToken', 'claimTokenHash', 'claim_token', 'claim_token_hash', 'executorExecutionId', 'accountId', 'tankId']) delete modelWork[key];
+    const execution = await executor({ skill, work: modelWork, onExecutorPid: lock.updateExecutorPid || (async () => {}) });
     const validation = validateTankAnalysisResult(execution.result, {
       expectedAnalysisRequestId: work.analysisRequestId,
       expectedQuestion: work.question,
@@ -164,9 +178,12 @@ export async function executeEligibleWork({
     });
     if (!validation.valid) return { status: 'INVALID_STRUCTURED_RESULT', errorCodes: validation.errors.slice(0, 12) };
 
-    const after = await journal.current(work.attemptId);
+    const after = await journal.current(work.attemptId, work.claimToken);
     if (!sameExecution(work, after)) return { status: 'STALE_AFTER_EXECUTION' };
-    const provenance = createExecutionProvenance({ sourceIdentity, executor: execution.executor, work, skill });
+    const provenanceExecutor = adapter.authoritativeExecutionId
+      ? { ...execution.executor, executionId: work.executorExecutionId }
+      : execution.executor;
+    const provenance = createExecutionProvenance({ sourceIdentity, executor: provenanceExecutor, work, skill });
     const artifact = await artifactStore.createOnly({ work, result: execution.result, executionProvenance: provenance, createdAt: now().toISOString() });
     return { status: artifact.created ? 'ARTIFACT_CREATED' : 'EXISTING_ARTIFACT_VERIFIED', artifact };
   } finally {

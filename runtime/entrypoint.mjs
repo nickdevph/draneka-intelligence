@@ -2,23 +2,29 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { captureProducerSourceIdentity, resolvePinnedTankAnalysisSkill } from './pinned-skill.mjs';
 import { runCodexCliTankAnalysis } from './codex-cli-executor.mjs';
 import { JournalProducerIpcClient } from './journal-ipc-client.mjs';
+import { JournalCodexClaimClient } from './journal-codex-claim-client.mjs';
 import { GitHubArtifactStore } from './github-artifact-store.mjs';
 import { runProducerCycle } from './producer-cycle.mjs';
 
 const socketPath = process.env.JOURNAL_JI_PRODUCER_SOCKET_PATH;
-if (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production' || process.env.JOURNAL_JI_NONPROD_PRODUCER_ENABLED !== 'true') {
-  throw new Error('The local Codex CLI producer is qualification-only and refuses production activation.');
-}
-if (!socketPath) throw new Error('JOURNAL_JI_PRODUCER_SOCKET_PATH is required.');
+const nonprodMode = process.env.JOURNAL_JI_NONPROD_PRODUCER_ENABLED === 'true';
+const codexCliMode = process.env.JOURNAL_JI_CODEX_CLI_ADAPTER_ENABLED === 'true';
+const productionEnvironment = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+const once = process.argv.slice(2).includes('--once');
+if (nonprodMode === codexCliMode) throw new Error('Enable exactly one Journal Intelligence producer adapter mode.');
+if (productionEnvironment && !codexCliMode) throw new Error('The qualification-only producer refuses production activation.');
+if (codexCliMode && !once) throw new Error('The Codex CLI scheduled adapter requires one-shot execution with --once.');
+if (nonprodMode && !socketPath) throw new Error('JOURNAL_JI_PRODUCER_SOCKET_PATH is required.');
 
 const sourceIdentity = await captureProducerSourceIdentity();
 const skill = await resolvePinnedTankAnalysisSkill();
-const journal = new JournalProducerIpcClient(socketPath);
+const journal = codexCliMode
+  ? new JournalCodexClaimClient()
+  : new JournalProducerIpcClient(socketPath);
 const artifactStore = new GitHubArtifactStore();
 await artifactStore.verifyWriteAuthority();
 const deferredUntil = new Map();
 const excluded = new Set();
-const once = process.argv.slice(2).includes('--once');
 let stopping = false;
 
 function stop() { stopping = true; }
