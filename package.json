@@ -1,0 +1,13 @@
+{
+  "name": "draneka-intelligence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:nonprod-producer": "node --test runtime/*.test.mjs",
+    "start:nonprod-producer": "node runtime/entrypoint.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}
